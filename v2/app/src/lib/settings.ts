@@ -1,5 +1,5 @@
 import AsyncStorage from "@react-native-async-storage/async-storage";
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useState, useSyncExternalStore } from "react";
 import { REVIEW_BATCH } from "../../../shared/src/srs";
 import { DIRECTIONS, type Direction } from "../../../shared/src/types";
 
@@ -112,6 +112,46 @@ export function useAutoSpeak(): [boolean, (v: boolean) => void] {
     autoSpeakOn = value;
   }, [value]);
   return [value, setValue];
+}
+
+// App theme: follow the OS ("system") or force light/dark. Unlike the per-screen
+// setting hooks, this is a shared external store — every useTheme() in the tree
+// subscribes, so flipping it in Settings restyles the whole app at once instead
+// of only the screen that changed it. Persisted on-device like everything else.
+export type ThemePref = "system" | "light" | "dark";
+export const THEME_OPTIONS: ThemePref[] = ["system", "light", "dark"];
+export const DEFAULT_THEME_PREF: ThemePref = "system";
+
+function parseThemePref(raw: string): ThemePref {
+  return raw === "light" || raw === "dark" ? raw : "system";
+}
+
+let themePref: ThemePref = DEFAULT_THEME_PREF;
+const themeListeners = new Set<() => void>();
+const emitTheme = () => themeListeners.forEach((l) => l());
+AsyncStorage.getItem("settings.theme").then((v) => {
+  const next = parseThemePref(v ?? "");
+  if (next !== themePref) {
+    themePref = next;
+    emitTheme();
+  }
+});
+
+export function useThemePref(): [ThemePref, (v: ThemePref) => void] {
+  const value = useSyncExternalStore(
+    (cb) => {
+      themeListeners.add(cb);
+      return () => themeListeners.delete(cb);
+    },
+    () => themePref,
+    () => themePref,
+  );
+  const set = useCallback((v: ThemePref) => {
+    themePref = v;
+    AsyncStorage.setItem("settings.theme", v);
+    emitTheme();
+  }, []);
+  return [value, set];
 }
 
 // "Scaffold day time": until a card's SRS interval reaches this many days, it's

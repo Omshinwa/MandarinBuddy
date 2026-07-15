@@ -35,14 +35,12 @@ services:
     staticPublishPath: dist
     autoDeploy: true
     envVars:
-      # Point the web bundle at the API. Resolved from the server service above
-      # (Render injects its host, e.g. superanki-server.onrender.com); the app
-      # prepends https automatically. EXPO_PUBLIC_* is inlined at build time.
+      # The server's PUBLIC URL, baked into the web bundle at build time.
+      # NOTE: don't use `fromService`/`host` here — for a web service that
+      # resolves to the INTERNAL name (`superanki-server`), which a browser
+      # can't reach. Set the full public https URL explicitly.
       - key: EXPO_PUBLIC_API_URL
-        fromService:
-          type: web
-          name: superanki-server
-          property: host
+        value: https://superanki-server.onrender.com
     routes:
       # Single-page app: serve index.html for any path the static files don't
       # match, so refreshes and deep links work. Real assets take precedence.

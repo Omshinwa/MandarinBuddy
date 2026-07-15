@@ -8,15 +8,19 @@ import {
   DEFAULT_REVIEW_BATCH,
   DEFAULT_SCAFFOLD_MAX_DAYS,
   DEFAULT_TEST_METHODS,
+  DEFAULT_THEME_PREF,
   DEFAULT_USER_LANGUAGE,
   INPUT_LENIENCY_OPTIONS,
   LANGUAGE_OPTIONS,
   REVIEW_BATCH_OPTIONS,
+  THEME_OPTIONS,
+  type ThemePref,
   useFuzzyPinyin,
   useInputLeniency,
   useReviewBatch,
   useScaffoldMaxDays,
   useTestMethods,
+  useThemePref,
   useUserLanguage,
 } from "../lib/settings";
 import { useTheme, type Theme } from "../theme";
@@ -31,12 +35,19 @@ const DIRECTION_LABEL: Record<Direction, string> = {
   writing: "✍️ Writing",
 };
 
+const THEME_LABEL: Record<ThemePref, string> = {
+  system: "🌗 System",
+  light: "☀️ Light",
+  dark: "🌙 Dark",
+};
+
 const SCAFFOLD_DAY_OPTIONS = [0, 3, 7, 14, 30, 45, 60];
 
 export function SettingsScreen({ onClose }: { onClose?: () => void }) {
   const t = useTheme();
   const s = styles(t);
   const insets = useSafeAreaInsets();
+  const [themePref, setThemePref] = useThemePref();
   const [language, setLanguage] = useUserLanguage();
   const [methods, setMethod] = useTestMethods();
   const [fuzzy, setFuzzy] = useFuzzyPinyin();
@@ -56,6 +67,7 @@ export function SettingsScreen({ onClose }: { onClose?: () => void }) {
       ))
     )
       return;
+    setThemePref(DEFAULT_THEME_PREF);
     setLanguage(DEFAULT_USER_LANGUAGE);
     DIRECTIONS.forEach((d) => setMethod(d, DEFAULT_TEST_METHODS[d]));
     setFuzzy(DEFAULT_FUZZY_PINYIN);
@@ -74,6 +86,20 @@ export function SettingsScreen({ onClose }: { onClose?: () => void }) {
           </Pressable>
         )}
       </View>
+
+      <Section title="Appearance" t={t}>
+        <View style={s.chips}>
+          {THEME_OPTIONS.map((opt) => (
+            <Chip
+              key={opt}
+              label={THEME_LABEL[opt]}
+              active={themePref === opt}
+              onPress={() => setThemePref(opt)}
+              t={t}
+            />
+          ))}
+        </View>
+      </Section>
 
       <Section title="Your language" t={t}>
         <View style={s.chips}>

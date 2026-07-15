@@ -40,11 +40,14 @@ web service runs `expo export` and publishes `dist/`.
 
 ## 2. How the web app finds the API
 
-You don't set this by hand. In the Blueprint, `superanki-web`'s
-`EXPO_PUBLIC_API_URL` is resolved from the server service (`fromService`), so it
-picks up the server's host at deploy time; the app prepends `https`. Because
-`EXPO_PUBLIC_*` is inlined at **build** time, changing the server later means
-redeploying the web service — Render does this automatically on the next push.
+The Blueprint sets `superanki-web`'s `EXPO_PUBLIC_API_URL` to the server's full
+public URL (`https://superanki-server.onrender.com`). It's baked into the bundle
+at **build** time, so if that URL ever changes, edit the value in `render.yaml`
+(or the web service's env vars) and redeploy the web service.
+
+> Don't wire this with `fromService`/`property: host` — for a web service that
+> resolves to the internal name (`superanki-server`), which the browser can't
+> reach. Use the explicit https URL.
 
 ## 3. The phone app (optional)
 
@@ -65,7 +68,7 @@ local-dev behavior (talk to a server on the same host, port 6767).
 | server (Render) | `MONGODB_URI` | Mongo/Atlas connection string |
 | server (Render) | `DEEPSEEK_API_KEY` | chat/tutor LLM |
 | server (Render) | `PORT` | injected by Render; don't set it |
-| web (Render) | `EXPO_PUBLIC_API_URL` | auto-wired to the server service |
+| web (Render) | `EXPO_PUBLIC_API_URL` | server's public https URL (in render.yaml) |
 | phone build | `EXPO_PUBLIC_API_URL` | set by hand to the server URL |
 
 CORS is already open (`app.use("*", cors())`), so the browser app can call the

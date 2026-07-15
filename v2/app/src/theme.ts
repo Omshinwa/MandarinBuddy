@@ -1,4 +1,5 @@
 import { useColorScheme } from "react-native";
+import { useThemePref } from "./lib/settings";
 
 export interface Theme {
   dark: boolean;
@@ -46,5 +47,9 @@ const dark: Theme = {
 };
 
 export function useTheme(): Theme {
-  return useColorScheme() === "dark" ? dark : light;
+  const system = useColorScheme();
+  const [pref] = useThemePref();
+  // "system" tracks the OS/browser; light/dark force it regardless.
+  const isDark = pref === "system" ? system === "dark" : pref === "dark";
+  return isDark ? dark : light;
 }

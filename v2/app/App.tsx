@@ -2,7 +2,7 @@ import { createBottomTabNavigator } from "@react-navigation/bottom-tabs";
 import { DarkTheme, DefaultTheme, NavigationContainer } from "@react-navigation/native";
 import { StatusBar } from "expo-status-bar";
 import React from "react";
-import { Text, useColorScheme } from "react-native";
+import { Text } from "react-native";
 import { SafeAreaProvider } from "react-native-safe-area-context";
 import { ChatScreen } from "./src/screens/ChatScreen";
 import { ReviewScreen } from "./src/screens/ReviewScreen";
@@ -17,13 +17,13 @@ const icon = (emoji: string) =>
   };
 
 export default function App() {
-  const scheme = useColorScheme();
   const t = useTheme();
 
+  const base = t.dark ? DarkTheme : DefaultTheme;
   const navTheme = {
-    ...(scheme === "dark" ? DarkTheme : DefaultTheme),
+    ...base,
     colors: {
-      ...(scheme === "dark" ? DarkTheme : DefaultTheme).colors,
+      ...base.colors,
       primary: t.tint,
       background: t.bg,
       card: t.card,
@@ -35,7 +35,7 @@ export default function App() {
   return (
     <SafeAreaProvider>
       <NavigationContainer theme={navTheme}>
-        <StatusBar style={scheme === "dark" ? "light" : "dark"} />
+        <StatusBar style={t.dark ? "light" : "dark"} />
         <Tab.Navigator
           screenOptions={{
             tabBarActiveTintColor: t.tint,
