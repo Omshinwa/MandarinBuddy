@@ -1,0 +1,172 @@
+import Anthropic from "@anthropic-ai/sdk";
+import { Hono } from "hono";
+import { streamSSE } from "hono/streaming";
+import { applyGrade } from "../../../shared/src/srs";
+import type { ChatEvent, ChatMode, FlashcardProposal } from "../../../shared/src/types";
+import { chats, words } from "../db";
+import {
+  ASSISTANT_SYSTEM,
+  CONVERSATION_SYSTEM,
+  PROPOSE_FLASHCARD_TOOL,
+  buildVocabBlock,
+} from "../prompts";
+
+export const chatRoute = new Hono();
+
+const MODEL = "claude-opus-4-8";
+const HISTORY_TURNS = 30;
+
+function parseMode(value: string | undefined): ChatMode | null {
+  return value === "assistant" || value === "conversation" ? value : null;
+}
+
+// GET /api/chat/history?mode=
+chatRoute.get("/history", async (c) => {
+  const mode = parseMode(c.req.query("mode"));
+  if (!mode) return c.json({ error: "bad mode" }, 400);
+  const docs = await chats.find({ mode }).sort({ createdAt: 1 }).toArray();
+  return c.json(
+    docs.map((d) => ({
+      _id: d._id.toHexString(),
+      mode: d.mode,
+      role: d.role,
+      content: d.content,
+      createdAt: d.createdAt.toISOString(),
+    })),
+  );
+});
+
+// DELETE /api/chat/history?mode=
+chatRoute.delete("/history", async (c) => {
+  const mode = parseMode(c.req.query("mode"));
+  if (!mode) return c.json({ error: "bad mode" }, 400);
+  await chats.deleteMany({ mode });
+  return c.json({ ok: true });
+});
+
+// In conversation mode, credit dictionary words the user produced (once per word per day).
+async function creditUsedWords(message: string, now: Date): Promise<string[]> {
+  const today = now.toISOString().slice(0, 10);
+  const all = await words.find({ srs: { $exists: true } }).toArray();
+  const credited: string[] = [];
+  for (const w of all) {
+    if (!w.chinese || w.chinese.length === 0) continue;
+    if (!message.includes(w.chinese)) continue;
+    if (w.convCreditDate === today) continue;
+    await words.updateOne(
+      { _id: w._id },
+      {
+        $set: {
+          "srs.reading": applyGrade(w.srs!.reading, "conversation_used", now),
+          "srs.writing": applyGrade(w.srs!.writing, "conversation_used", now),
+          convCreditDate: today,
+          updatedAt: now,
+        },
+      },
+    );
+    credited.push(w.chinese);
+  }
+  return credited;
+}
+
+// POST /api/chat  — body {mode, message}; response is an SSE stream of ChatEvent
+chatRoute.post("/", async (c) => {
+  const body = (await c.req.json()) as { mode?: string; message?: string };
+  const mode = parseMode(body.mode);
+  const message = body.message?.trim();
+  if (!mode || !message) return c.json({ error: "mode and message required" }, 400);
+
+  if (!process.env.ANTHROPIC_API_KEY) {
+    return c.json({ error: "ANTHROPIC_API_KEY is not set in server/.env" }, 500);
+  }
+  const anthropic = new Anthropic();
+  const now = new Date();
+
+  await chats.insertOne({ mode, role: "user", content: message, createdAt: now } as never);
+
+  // Build system blocks. Stable text first, cache_control on each stable block.
+  const system: Anthropic.TextBlockParam[] =
+    mode === "assistant"
+      ? [{ type: "text", text: ASSISTANT_SYSTEM, cache_control: { type: "ephemeral" } }]
+      : [
+          { type: "text", text: CONVERSATION_SYSTEM, cache_control: { type: "ephemeral" } },
+          {
+            type: "text",
+            text: buildVocabBlock(await words.find({ srs: { $exists: true } }).toArray(), now),
+            cache_control: { type: "ephemeral" },
+          },
+        ];
+
+  const historyDocs = await chats
+    .find({ mode })
+    .sort({ createdAt: -1 })
+    .limit(HISTORY_TURNS)
+    .toArray();
+  const messages: Anthropic.MessageParam[] = historyDocs
+    .reverse()
+    .map((d) => ({ role: d.role, content: d.content }));
+
+  return streamSSE(c, async (sse) => {
+    const send = (ev: ChatEvent) => sse.writeSSE({ data: JSON.stringify(ev) });
+
+    try {
+      if (mode === "conversation") {
+        const credited = await creditUsedWords(message, now);
+        if (credited.length > 0) await send({ type: "credits", chinese: credited });
+      }
+
+      let assistantText = "";
+      // Tool loop: stream → if the model called propose_flashcard, forward it to the
+      // app, append a tool_result, and continue the same turn.
+      for (let iteration = 0; iteration < 4; iteration++) {
+        const stream = anthropic.messages.stream({
+          model: MODEL,
+          max_tokens: 4096,
+          system,
+          messages,
+          tools: [PROPOSE_FLASHCARD_TOOL],
+        });
+
+        for await (const event of stream) {
+          if (event.type === "content_block_delta" && event.delta.type === "text_delta") {
+            assistantText += event.delta.text;
+            await send({ type: "delta", text: event.delta.text });
+          }
+        }
+
+        const final = await stream.finalMessage();
+        if (final.stop_reason !== "tool_use") break;
+
+        const toolUses = final.content.filter(
+          (b): b is Anthropic.ToolUseBlock => b.type === "tool_use",
+        );
+        for (const tu of toolUses) {
+          if (tu.name === "propose_flashcard") {
+            await send({ type: "flashcard", card: tu.input as FlashcardProposal });
+          }
+        }
+        messages.push({ role: "assistant", content: final.content });
+        messages.push({
+          role: "user",
+          content: toolUses.map((tu) => ({
+            type: "tool_result" as const,
+            tool_use_id: tu.id,
+            content: "card shown to user",
+          })),
+        });
+      }
+
+      if (assistantText.trim()) {
+        await chats.insertOne({
+          mode,
+          role: "assistant",
+          content: assistantText,
+          createdAt: new Date(),
+        } as never);
+      }
+      await send({ type: "done" });
+    } catch (err) {
+      await send({ type: "error", message: err instanceof Error ? err.message : "unknown error" });
+    }
+  });
+});

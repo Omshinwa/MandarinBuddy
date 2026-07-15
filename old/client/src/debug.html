@@ -1,0 +1,38 @@
+<body>
+  
+          <button onclick="playPlaylist([['你好，我是帅哥']], 0);">CHINESE</button>
+</body>
+<script>
+  
+    function createAudio(string, isEnglish) {
+      let audio;
+      audio = new SpeechSynthesisUtterance();
+      audio.text = string.replace(/>/g, "").replace(/</g, "");
+      if (!isEnglish) {
+        audio.lang = "zh";
+      }
+      else
+      {
+        audio.rate = 0.4;
+      }
+      console.log(string);
+      return audio;
+    }
+  
+      function playPlaylist(playlist, index) {
+        let audio;
+        if (index % 2 == 0) {
+          //chinois
+          audio = createAudio(playlist[parseInt(index/2)][0], false);
+        } else {
+          audio = createAudio(playlist[parseInt(index/2)][1], true);
+        }
+
+        window.speechSynthesis.speak(audio);
+        audio.onend = function () {
+          setTimeout(function () {
+            playPlaylist(playlist, index + 1);
+          }, 1500);
+        };
+      }
+</script>

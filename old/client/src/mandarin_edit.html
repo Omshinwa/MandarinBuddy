@@ -1,0 +1,255 @@
+<!DOCTYPE html>
+<!-- saved from url=(0054)http://fynmorph.free.fr/sprite_comic/randomizer/random -->
+<html>
+
+<head>
+  <meta http-equiv="Content-Type" content="text/html; charset=Unicode" />
+  <meta name="robots" content="noindex" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+
+  <title>CN TRAINER</title>
+  <script class="jsbin" src="jquery-3.3.1.js"></script>
+  <!-- je suis pas sûr de son utilité -->
+  <script type="application/javascript">
+    function el(id) {
+      return document.getElementById(id);
+    } // Get elem by ID
+    function print(e) {
+      console.log(e);
+    }
+
+    function randint(min, max) {
+      return Math.floor(Math.random() * (max + 1 - min) + min);
+    }
+
+    function get_random_color() {
+      var h = randint(1, 360);
+      var s = 100;
+      var l = randint(20, 80);
+      return "hsl(" + h + "," + s + "%," + l + "%)";
+    }
+
+    function couleur(niveau) {
+      switch (parseInt(niveau)) {
+        case 1:
+          return "#fff";
+          break;
+        case 2:
+          return "#ddc1ff";
+          break;
+        case 3:
+          return "#99e9fa";
+          break;
+        case 4:
+          return "#91ffc0";
+          break;
+        case 5:
+          return "#fffaab";
+          break;
+        case 6:
+          return "#c10000";
+          break;
+        case 7:
+          return "#222222";
+          break;
+        case 8:
+          return "#fff";
+          break;
+      }
+    }
+
+    function addcolor() {
+      document.body.style.backgroundColor = get_random_color();
+    }
+  </script>
+  <style type="text/css">
+    #carre7 {
+      color: white;
+    }
+
+    .jolicarre {
+      width: 50px;
+      height: 1000px;
+      float: left;
+      border: 0px solid #ccc;
+    }
+
+    #carreaux {
+      position: absolute;
+      z-index: 0;
+      top: 0px;
+      left: 0px;
+    }
+
+    button {
+      font-size: 30px;
+      background-color: #ee99dd;
+      padding: 10px 20px;
+      text-align: center;
+      text-decoration: bold;
+      display: inline-block;
+      margin: 4px 2px;
+      cursor: pointer;
+    }
+
+    @font-face {
+      font-family: SimSun;
+      src: url("SimSun.ttf");
+    }
+
+    #enword {
+      font-size: 40px;
+    }
+
+    #cnword {
+      font-size: 60px;
+      font-family: "SimSun";
+    }
+
+    #pinyin {
+      font-size: 20px;
+    }
+
+    #pinyin2 {
+      font-size: 20px;
+    }
+
+    .carre {
+      position: relative;
+      background: #fff;
+      width: 50px;
+      display: inline-block;
+    }
+
+    .nbmots {
+      margin: 0;
+      position: relative;
+    }
+
+    input[type="checkbox"] {
+      -webkit-appearance: none;
+      width: 30px;
+      height: 30px;
+      background: white;
+      border-radius: 5px;
+      border: 2px solid #555;
+    }
+
+    input[type="checkbox"]:checked {
+      background: #f11;
+    }
+  </style>
+</head>
+
+<body style="background-color: #aaa">
+  <center style="font-size: 25px; font-family: 'comic sans ms'">
+    <select name="cars" id="niveauAcharger" onchange="lire(value);" style="font-size: 40px">
+      <option></option>
+      <option value="0">ALL</option>
+      <option value="1">NIVEAU 1</option>
+      <option value="2">NIVEAU 2</option>
+      <option value="3">NIVEAU 3</option>
+      <option value="4">NIVEAU 4</option>
+      <option value="5">NIVEAU 5</option>
+      <option value="6">NIVEAU 6</option>
+      <option value="7">NIVEAU 7</option>
+      <option value="8">NIVEAU 8</option>
+      <option value="9">NIVEAU 9</option>
+      <option value="10">backup ALL</option>
+    </select>
+    <br />
+
+    <div>
+      <textarea cols="50" rows="40" id="text1"></textarea>
+    </div>
+
+    <button onclick="overwrite();">overWRITE</button><button onclick="window.location.href='/'">BACK</button><br />
+    <div>
+      <a href="tools.html" style="font-size: 20px">tools</a>
+    </div>
+  </center>
+</body>
+
+</html>
+
+<script type="application/javascript">
+  function lire(a) {
+    if (a == '0')
+      el("text1").value = create_data_0(); //or something similar
+    else if (a) {
+      let url = "";
+      url = "/data/current/data" + a + ".txt";
+      //  Backup not implemented in new DB system, defaulting to current or error
+      //  Since the server doesn't support backup reads anymore, we could link to current
+      //  or handle it. Based on server code, backup file requests return 404 anyway.
+      //  Let's assume user wants current if backup is checked for now or fail gracefully.
+
+      $.ajax({
+        type: "GET",
+        url: url,
+        async: false,
+        success: function (data) {
+          el("text1").value = data; //or something similar
+        },
+      });
+    }
+  }
+
+  function overwrite() {
+    if (el("niveauAcharger").value) {
+      $.ajax({
+        type: "POST",
+        url: "/overwrite",
+        data: {
+          niveau: "current/data" + el("niveauAcharger").value,
+          data: el("text1").value,
+        },
+        success: function () {
+          addcolor();
+        },
+      });
+    }
+  }
+
+  // return a String of all the levels as a sort of back up file.
+  function create_data_0()
+  {
+    let string = ""; //"word count: 1551 // day: 1352@470@0"
+    let Nbwords = 0;
+
+    // get data and import them
+    for (var i = 1; i < 10; i++) {
+      $.ajax({
+        type: "GET",
+        url: "/data/current/data" + i + ".txt",
+        async: false,
+        success: function (data) {
+          string += "\n------*" + i + "*------\n";
+          string += '\n';
+          string += data;
+          string += '\n';
+          Nbwords += data.split("\n").filter(Boolean).length;
+          // print(data);
+        },
+      });
+    }
+    var jour = 0;
+    var step = 0;
+    var lastplayed = 0;
+    $.ajax({
+      type: "GET",
+      url: "/jour.txt",
+      async: false,
+      success: function (data) {
+        jour = data.split("@")[1];
+        step = data.split("@")[2];
+        lastplayed = data.split("@")[0]; //get the date the last time the app was played (its the number of days from 1/1/2022)
+        console.log(data);
+      },
+    });
+
+    let header_str = "word count: " + Nbwords + ", last played: "+lastplayed+" day:"+jour+"@"+step+"\n\n";
+    header_str += string;
+    return header_str;
+  }
+</script>

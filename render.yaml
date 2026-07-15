@@ -1,0 +1,51 @@
+# Render Blueprint — https://render.com/docs/blueprint-spec
+# Deploys both halves of SuperAnki v2:
+#   - superanki-server: the Hono API (v2/server)
+#   - superanki-web:    the Expo web build served as a static site (v2/app)
+# Render clones the whole repo, so the server's imports from ../shared resolve.
+#
+# To use: push this repo to GitHub, then in Render → New → Blueprint, pick the
+# repo. Render reads this file and creates both services. Fill in the two secret
+# env vars (marked sync:false) on the server when prompted; the web app's API
+# URL is wired to the server automatically.
+services:
+  - type: web
+    name: superanki-server
+    runtime: node
+    plan: free
+    rootDir: v2/server
+    buildCommand: npm install
+    startCommand: npm start
+    healthCheckPath: /health
+    autoDeploy: true
+    envVars:
+      # MongoDB connection string (e.g. a MongoDB Atlas cluster). The DB name
+      # comes from the URI path. Set this in the Render dashboard.
+      - key: MONGODB_URI
+        sync: false
+      # DeepSeek API key for the chat/tutor. Set this in the Render dashboard.
+      - key: DEEPSEEK_API_KEY
+        sync: false
+
+  - type: web
+    name: superanki-web
+    runtime: static
+    rootDir: v2/app
+    buildCommand: npm install && npm run export:web
+    staticPublishPath: dist
+    autoDeploy: true
+    envVars:
+      # Point the web bundle at the API. Resolved from the server service above
+      # (Render injects its host, e.g. superanki-server.onrender.com); the app
+      # prepends https automatically. EXPO_PUBLIC_* is inlined at build time.
+      - key: EXPO_PUBLIC_API_URL
+        fromService:
+          type: web
+          name: superanki-server
+          property: host
+    routes:
+      # Single-page app: serve index.html for any path the static files don't
+      # match, so refreshes and deep links work. Real assets take precedence.
+      - type: rewrite
+        source: /*
+        destination: /index.html

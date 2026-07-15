@@ -1,0 +1,200 @@
+<script>
+  console.log("Hello world!");
+</script>
+
+<!DOCTYPE html>
+<html>
+  <head>
+    <meta http-equiv="Content-Type" content="text/html; charset=Unicode" />
+    <meta name="robots" content="noindex" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <meta name="referrer" content="no-referrer" />
+    <!-- sinon le text to speech de google renvoie un 404 error -->
+
+    <title>CN TRAINER</title>
+  <!-- load local copies from the src/ folder -->
+  <script src="src/jquery-3.3.1.js"></script>
+  <!-- <script src="/socket.io/socket.io.js"></script> -->
+  <script src="src/index.js"></script>
+    <style type="text/css">
+      #carre7 {
+        color: white;
+      }
+
+      .jolicarre {
+        width: 50px;
+        height: 1000px;
+        float: left;
+        border: 0px solid #ccc;
+      }
+
+      #carreaux {
+        position: absolute;
+        z-index: 0;
+        top: 0px;
+        left: 0px;
+      }
+
+      button {
+        font-size: 30px;
+        background-color: #EE99DD;
+        padding: 10px 20px;
+        text-align: center;
+        text-decoration: bold;
+        display: inline-block;
+        margin: 4px 2px;
+        cursor: pointer;
+      }
+
+      @font-face {
+        font-family: SimSun;
+        src: url("src/SimSun.ttf");
+      }
+
+      #enword {
+        font-size: 40px;
+      }
+
+      #cnword {
+        font-size: 60px;
+        font-family: "SimSun";
+      }
+
+      #pinyin {
+        font-size: 20px;
+      }
+      #pinyin {
+        font-size: 20px;
+      }
+
+      #div_example {
+        font-size: 30px;
+      }
+
+      .carre {
+        position: relative;
+        background: #fff;
+        width: 50px;
+        display: inline-block;
+      }
+
+      .nbmots {
+        margin: 0;
+        position: relative;
+      }
+
+      #prompt {
+        width: 250px;
+        position: relative;
+      }
+    </style>
+  </head>
+  <body style="background-color:#aaa">
+    <span id="carreaux"></span>
+    <span style="position:absolute; z-index:1;left: 50%">
+      <span style="position: relative; left: -50%;">
+        <center>
+          <button style="letter-spacing: -3px;" onclick="newword();">CHINESE</button>
+          <button onclick="skip_step()">➛</button>
+
+          <br /><span style="font-size:30px; font-family: 'comic sans ms';"
+            >Day:<span id="day"></span> LVL:<span id="level"></span> /
+            <span id="Nbwords"></span></span
+          ><br /><span id="questionType"></span><br />
+          <div id="prompt" style="background:#fff;">
+            <div
+              id="oral_only"
+              style="position:absolute; top:0; left:0; display:block; height:190px; width:250px; background-image: url('src/img/oral_only.png')"
+              alt="/"
+                 ></div>
+            <div
+              id="write_only"
+              style="position:absolute; top:0; left:0; display:block; height:190px; width:250px; background-image: url('src/img/write_only.png')"
+              alt="/"
+            ></div>
+            <div id="enword" style="position: relative; height:70px;"></div>
+            <div id="pinyin" style="position: relative; height:20px;"></div>
+            <div id="cnword" style="position: relative; height:100px;"></div>
+            <div id="div_example" style=""></div>
+          </div>
+          <br />
+
+          <form
+            action="javascript:compare();"
+            method="get"
+            autocomplete="off"
+          >
+            <input style="display:none" />
+            <input type="password" style="display:none" />
+            <input id="pass" value="" style="font-size: 16px;" type="input" />
+            <!-- au moins 16 de pixel de taille sinon sur iphone ça auto zoom in -->
+            <br />
+            <input type="submit" value="Submit" />
+          </form>
+
+          <div>
+            <input
+              type="checkbox"
+              id="sound_mute"
+              name="sound_mute"
+              onchange="if(el('playbutton').innerText == 'X'){el('playbutton').innerText ='►'} else{el('playbutton').innerText = 'X';}"
+            />
+            <label for="sound_mute">MUTE</label>
+            
+                        <input
+              type="checkbox"
+              id="fuzzy_pinyin"
+              checked
+              name="fuzzy_pinyin"
+            />
+            <label for="fuzzy_pinyin">FUZZY PINYIN</label>
+          </div>
+
+          <button style="letter-spacing: -3px;" onclick="giveup();">GIVE UP</button>
+          <button id="playbutton">►</button>
+
+          <div id="result"></div>
+
+          <div
+            id="stats"
+            style="text-align:center; font-family: 'Franklin Gothic';"
+          >
+            <!-- ici y a l'histogramme -->
+          </div>
+
+          <br />
+
+          <div>
+            <a href="src/mandarin_edit.html" style="font-size:30px"
+              >éditer les mots?</a
+            >
+            <p>
+              <a href="src/tools.html" style="font-size:20px">tools</a>
+              <br>
+              <a href="src/sleep.html" style="font-size:20px">sleep</a>
+            </p>
+          </div>
+
+          <br />
+
+          @WU WILLIAM 吴咸量 2018/11
+        </center>
+      </span>
+    </span>
+  </body>
+
+  <script>
+    el("playbutton").addEventListener("click", function() {
+      playVoice(1);
+    });
+
+    for (i = 1; i < 10; i++) {
+      var div = document.createElement("div");
+      div.classList.add("carre");
+      div.id = "carre" + i;
+      div.innerHTML =
+      '<span class="nbmots" id="nbmots_carre' + i + '">' + i + '</span>';
+      el("stats").appendChild(div);
+    }
+  </script>
+</html>

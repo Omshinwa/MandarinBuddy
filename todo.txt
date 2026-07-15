@@ -1,0 +1,26 @@
+SUPERANKI — TODO
+
+[ ] Native-feeling text selection in chat (ChatThread / GlossedText)
+    Problem: on iPhone you can only copy a whole message — no draggable cursor,
+    loupe magnifier, or partial selection like native iOS text.
+
+    Why it's hard: React Native <Text selectable> only offers select-all + copy;
+    it does not expose per-character geometry, so a *custom* draggable cursor
+    means reimplementing native text selection from scratch (hit-testing each
+    glyph, drawing the selection highlight + drag handles, the magnifier loupe,
+    and wiring the system copy/lookup/share menu). That's a large effort and
+    still won't match native quality. Deferred per that reason.
+
+    Cheaper alternative if we revisit: render each message body as a read-only
+    multiline <TextInput> (editable={false}) — that gives fully native selection
+    for free. The catch is a TextInput can't host inline tap-to-reveal gloss
+    words, so the gloss feature would move to tappable vocab chips shown *under*
+    each AI message (tap a chip → reveal pinyin/meaning + apply SRS credit).
+    Files: v2/app/src/components/ChatThread.tsx, v2/app/src/components/GlossedText.tsx
+
+
+Show hint currently is only on the Writing test input.
+Make it universal?
+On all test input, this will then show the word.comments
+and all other infos besides the answer.
+Like for reading, it will show the meaning (like in scaffolding teaching).

@@ -1,0 +1,8 @@
+// idk its for cloudfare to launch
+// npx wrangler deploy
+
+{
+"name": "superanki",
+"compatibility_date": "2025-07-15",
+"main": "server.js"
+}

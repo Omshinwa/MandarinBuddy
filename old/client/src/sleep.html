@@ -1,0 +1,177 @@
+<!DOCTYPE html>
+<html>
+  <head>
+    <meta http-equiv="Content-Type" content="text/html; charset=Unicode" />
+    <meta name="robots" content="noindex" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <meta name="referrer" content="no-referrer" />
+    <!-- sinon le text to speech de google renvoie un 404 error -->
+
+    <title>CN TRAINER</title>
+    <script class="jsbin" src="jquery-3.3.1.js"></script>
+    <!-- je suis pas sûr de son utilité -->
+    <script src="index.js"></script>
+
+    <style type="text/css">
+      #carre7 {
+        color: white;
+      }
+
+      .jolicarre {
+        width: 50px;
+        height: 1000px;
+        float: left;
+        border: 0px solid #ccc;
+      }
+
+      #carreaux {
+        position: absolute;
+        z-index: 0;
+        top: 0px;
+        left: 0px;
+      }
+
+      button {
+        font-size: 30px;
+        background-color: #ee99dd;
+        padding: 10px 20px;
+        text-align: center;
+        text-decoration: bold;
+        display: inline-block;
+        margin: 4px 2px;
+        cursor: pointer;
+      }
+
+      @font-face {
+        font-family: SimSun;
+        src: url("SimSun.ttf");
+      }
+
+      #enword {
+        font-size: 40px;
+      }
+
+      #cnword {
+        font-size: 60px;
+        font-family: "SimSun";
+      }
+
+      #pinyin {
+        font-size: 20px;
+      }
+
+      #pinyin {
+        font-size: 20px;
+      }
+
+      #div_example {
+        font-size: 30px;
+      }
+
+      .carre {
+        position: relative;
+        background: #fff;
+        width: 50px;
+        display: inline-block;
+      }
+
+      .nbmots {
+        margin: 0;
+        position: relative;
+      }
+
+      #prompt {
+        width: 250px;
+      }
+    </style>
+  </head>
+
+  <body style="background-color: #aaa">
+    <span id="carreaux"></span>
+    <span style="position: absolute; z-index: 1; left: 50%">
+      <span style="position: relative; left: -50%">
+        <center>
+          <button onclick="read_everything();">SLEEP</button>
+          <div>
+            <a href="mandarin_edit.html" style="font-size: 30px"
+              >éditer les mots?</a
+            >
+            <p>
+              <a href="tools.html" style="font-size: 20px">tools</a>
+            </p>
+          </div>
+        </center>
+      </span>
+    </span>
+
+    <br />
+
+    @WU WILLIAM 吴咸量 2018/11
+  </body>
+
+  <script>
+
+  function getGoogleUSVoice() {
+    const voices = speechSynthesis.getVoices();
+    // exact name first, then fuzzy Google+en-US, then any en-US
+    return voices.find(v => v.name.toLowerCase() === 'google us english') ||
+          voices.find(v => v.name.toLowerCase().includes('google') && /^en(-|_)?us$/i.test(v.lang)) ||
+          voices.find(v => /^en(-|_)?us$/i.test(v.lang)) ||
+          null;
+  }
+    function createAudio(string, isEnglish) {
+      let audio = new SpeechSynthesisUtterance();
+      audio.text = string.replace(/>/g, "").replace(/</g, "");
+      if (!isEnglish) {
+        audio.lang = "zh";
+        audio.rate = 0.7;
+        audio.voice = speechSynthesis.getVoices().find(v => v.name.toLowerCase().includes('google') && /^zh/i.test(v.lang))
+      } else {
+        audio.lang = 'en-US';
+        audio.voice = getGoogleUSVoice();
+        audio.volume = 0.7;
+      }
+      console.log(string);
+      return audio;
+    }
+
+    function sleep(ms) {
+      return new Promise((resolve) => setTimeout(resolve, ms));
+    }
+
+    var allWords
+    // READ EVERY WORDS IN THE LIST, TO HELP SLEEPING
+    function read_everything() {
+      allWords = niveau1
+        .concat(niveau2)
+        .concat(niveau3)
+        .concat(niveau4)
+        .concat(niveau5)
+        .concat(niveau6)
+        .concat(niveau7)
+        .concat(niveau8);
+
+      let delay = 0;
+      let i = 0;
+
+      playPlaylist(allWords, 0);
+
+      function playPlaylist(playlist, index) {
+        let audio;
+        if (index % 2 == 1) {
+          // chinois
+          audio = createAudio(playlist[parseInt(index/2)][0].replace(".", ""), false);
+        } else {
+          audio = createAudio(playlist[parseInt(index/2)][1], true);
+        }
+
+        window.speechSynthesis.speak(audio);
+        audio.onend = function () {
+          setTimeout(function () {
+            playPlaylist(playlist, index + 1);
+          }, 1200);
+        };
+      }
+    }
+  </script>
+</html>
