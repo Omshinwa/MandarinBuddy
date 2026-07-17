@@ -41,9 +41,10 @@ services:
       # can't reach. Set the full public https URL explicitly.
       - key: EXPO_PUBLIC_API_URL
         value: https://superanki-server.onrender.com
-    routes:
-      # Single-page app: serve index.html for any path the static files don't
-      # match, so refreshes and deep links work. Real assets take precedence.
-      - type: rewrite
-        source: /*
-        destination: /index.html
+    # NOTE: no `routes` rewrite here. A `/* -> /index.html` rewrite on this
+    # static site returns an empty (0-byte) body for the root and every
+    # rewritten path, which renders as a blank page. The app has no URL-based
+    # routing (React Navigation is configured without `linking`), so it doesn't
+    # need an SPA deep-link fallback — Render serves dist/index.html at `/` by
+    # default. If deep-link fallback is ever needed, re-add routes and verify
+    # the root actually serves index.html's body, not an empty 200.
