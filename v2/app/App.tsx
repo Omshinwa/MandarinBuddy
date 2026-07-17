@@ -19,6 +19,8 @@ const icon = (emoji: string) =>
 export default function App() {
   const t = useTheme();
 
+  // t.dark already folds in the user's light/dark override, so drive the nav
+  // chrome and status bar from it rather than the raw OS scheme.
   const base = t.dark ? DarkTheme : DefaultTheme;
   const navTheme = {
     ...base,

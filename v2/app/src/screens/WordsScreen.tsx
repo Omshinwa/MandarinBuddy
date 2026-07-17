@@ -21,7 +21,6 @@ import type { Word, WordInput } from "../../../shared/src/types";
 import { ApiError, api } from "../lib/api";
 import { confirm } from "../lib/confirm";
 import { useTheme, type Theme } from "../theme";
-import { SettingsScreen } from "./SettingsScreen";
 
 const DAY_MS = 24 * 60 * 60 * 1000;
 
@@ -46,7 +45,6 @@ export function WordsScreen() {
   const [bucketFilter, setBucketFilter] = useState<number | null>(null);
   const [leechOnly, setLeechOnly] = useState(false);
   const [sheet, setSheet] = useState<{ mode: "add" } | { mode: "edit"; word: Word } | null>(null);
-  const [settingsOpen, setSettingsOpen] = useState(false);
 
   const load = useCallback(() => {
     api.listWords().then(setWords).catch(() => {});
@@ -91,13 +89,6 @@ export function WordsScreen() {
         />
         <Pressable style={[styles.addButton, { backgroundColor: t.tint }]} onPress={() => setSheet({ mode: "add" })}>
           <Text style={{ color: "#fff", fontSize: 24, lineHeight: 26 }}>＋</Text>
-        </Pressable>
-        <Pressable
-          style={[styles.iconButton, { backgroundColor: t.inputBg }]}
-          onPress={() => setSettingsOpen(true)}
-          accessibilityLabel="Settings"
-        >
-          <Text style={{ fontSize: 20 }}>⚙️</Text>
         </Pressable>
       </View>
 
@@ -180,14 +171,6 @@ export function WordsScreen() {
           t={t}
         />
       )}
-
-      <Modal
-        visible={settingsOpen}
-        animationType="slide"
-        onRequestClose={() => setSettingsOpen(false)}
-      >
-        <SettingsScreen onClose={() => setSettingsOpen(false)} />
-      </Modal>
     </View>
   );
 }
@@ -348,7 +331,6 @@ const styles = StyleSheet.create({
   header: { flexDirection: "row", gap: 10, padding: 12, paddingBottom: 6 },
   search: { flex: 1, borderRadius: 10, paddingHorizontal: 12, paddingVertical: 9, fontSize: 16 },
   addButton: { width: 42, height: 42, borderRadius: 12, alignItems: "center", justifyContent: "center" },
-  iconButton: { width: 42, height: 42, borderRadius: 12, alignItems: "center", justifyContent: "center" },
   chips: { gap: 6, paddingHorizontal: 12, paddingBottom: 8 },
   chip: { borderRadius: 14, paddingHorizontal: 10, paddingVertical: 4 },
   row: {

@@ -3,6 +3,7 @@ import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { DIRECTIONS, type Direction } from "../../../shared/src/types";
 import { confirm } from "../lib/confirm";
 import {
+  DEFAULT_BOTH_TRANSITION_DAYS,
   DEFAULT_FUZZY_PINYIN,
   DEFAULT_INPUT_LENIENCY,
   DEFAULT_REVIEW_BATCH,
@@ -15,6 +16,7 @@ import {
   REVIEW_BATCH_OPTIONS,
   THEME_OPTIONS,
   type ThemePref,
+  useBothTransitionDays,
   useFuzzyPinyin,
   useInputLeniency,
   useReviewBatch,
@@ -52,13 +54,16 @@ export function SettingsScreen({ onClose }: { onClose?: () => void }) {
   const [methods, setMethod] = useTestMethods();
   const [fuzzy, setFuzzy] = useFuzzyPinyin();
   const [scaffoldMaxDays, setScaffoldMaxDays] = useScaffoldMaxDays();
+  const [bothTransitionDays, setBothTransitionDays] = useBothTransitionDays();
   const [leniency, setLeniency] = useInputLeniency();
   const [reviewBatch, setReviewBatch] = useReviewBatch();
-  const anyInput = DIRECTIONS.some((d) => methods[d] === "input");
+  // "both" also produces typed input on mature cards, so leniency/fuzzy apply.
+  const anyInput = DIRECTIONS.some((d) => methods[d] === "input" || methods[d] === "both");
+  const anyBoth = DIRECTIONS.some((d) => methods[d] === "both");
 
   // Push every setter back to its default. We set values (rather than clearing
-  // AsyncStorage) so the on-screen state updates immediately — the hooks only
-  // read storage on mount.
+  // AsyncStorage) so every subscriber updates immediately — clearing storage
+  // wouldn't touch the in-memory store the screens read from.
   const resetToDefaults = async () => {
     if (
       !(await confirm(
@@ -72,6 +77,7 @@ export function SettingsScreen({ onClose }: { onClose?: () => void }) {
     DIRECTIONS.forEach((d) => setMethod(d, DEFAULT_TEST_METHODS[d]));
     setFuzzy(DEFAULT_FUZZY_PINYIN);
     setScaffoldMaxDays(DEFAULT_SCAFFOLD_MAX_DAYS);
+    setBothTransitionDays(DEFAULT_BOTH_TRANSITION_DAYS);
     setLeniency(DEFAULT_INPUT_LENIENCY);
     setReviewBatch(DEFAULT_REVIEW_BATCH);
   };
@@ -109,24 +115,46 @@ export function SettingsScreen({ onClose }: { onClose?: () => void }) {
         </View>
       </Section>
 
-      <Section title="Review test method" hint="FLASHCARD: you judge yourself. INPUT: you have to type the answer out." t={t}>
+      <Section title="Review test method" hint="FLASHCARD: shows the answer and you judge yourself. INPUT: you have to type part of the answer to pass. BOTH: flashcard while the card is young, then Input once it matures." t={t}>
+
         {DIRECTIONS.map((d) => (
           <View key={d} style={s.methodRow}>
-            <View style={s.methodHead}>
-              <Text style={s.label}>{DIRECTION_LABEL[d]}</Text>
-              <Segmented
-                value={methods[d]}
-                options={[
-                  { value: "flashcard", label: "Flashcard" },
-                  { value: "input", label: "Input" },
-                ]}
-                onChange={(m) => setMethod(d, m)}
-                t={t}
-              />
-            </View>
+            <Text style={s.label}>{DIRECTION_LABEL[d]}</Text>
+            <Segmented
+              value={methods[d]}
+              options={[
+                { value: "flashcard", label: "Flashcard" },
+                { value: "both", label: "Both" },
+                { value: "input", label: "Input" },
+              ]}
+              onChange={(m) => setMethod(d, m)}
+              t={t}
+            />
           </View>
         ))}
       </Section>
+
+      {/* Only relevant once a facet is Both — this is the interval at which it
+          flips from flashcard to typed input. */}
+      {anyBoth && (
+        <Section
+          title="Both — switch to Input at"
+          hint="A facet set to Both is a flashcard until the card's interval reaches this many days, then becomes a typed Input test."
+          t={t}
+        >
+          <View style={s.chips}>
+            {SCAFFOLD_DAY_OPTIONS.map((d) => (
+              <Chip
+                key={d}
+                label={`${d}d`}
+                active={bothTransitionDays === d}
+                onPress={() => setBothTransitionDays(d)}
+                t={t}
+              />
+            ))}
+          </View>
+        </Section>
+      )}
 
       {/* Leniency only affects typed answers, so hide it when nothing is Input. */}
       {anyInput && (
@@ -147,7 +175,7 @@ export function SettingsScreen({ onClose }: { onClose?: () => void }) {
             ))}
           </View>
           {/* Fuzzy only matters when reading is typed — tones are only checked on input. */}
-          {methods.reading === "input" && (
+          {(methods.reading === "input" || methods.reading === "both") && (
             <SwitchRow
               label="Fuzzy pinyin"
               hint="Accept the 2nd and 3rd tones interchangeably. Off = exact tones required."
@@ -328,10 +356,15 @@ const styles = (t: Theme) =>
     hint: { fontSize: 12.5, color: t.subtext, marginTop: 4 },
     chips: { flexDirection: "row", flexWrap: "wrap", gap: 8 },
     chip: { paddingVertical: 8, paddingHorizontal: 14, borderRadius: 20, borderWidth: 1.5 },
-    methodRow: { gap: 2 },
-    methodHead: { flexDirection: "row", justifyContent: "space-between", alignItems: "center" },
-    segmented: { flexDirection: "row", backgroundColor: t.inputBg, borderRadius: 10, padding: 2 },
-    segment: { paddingVertical: 6, paddingHorizontal: 12, borderRadius: 8 },
+    methodRow: { gap: 8 },
+    segmented: {
+      flexDirection: "row",
+      backgroundColor: t.inputBg,
+      borderRadius: 10,
+      padding: 2,
+      alignSelf: "stretch",
+    },
+    segment: { flex: 1, paddingVertical: 8, borderRadius: 8, alignItems: "center" },
     resetButton: {
       alignSelf: "center",
       marginTop: 4,

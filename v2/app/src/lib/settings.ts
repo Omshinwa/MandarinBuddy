@@ -1,68 +1,94 @@
 import AsyncStorage from "@react-native-async-storage/async-storage";
-import { useCallback, useEffect, useState, useSyncExternalStore } from "react";
+import { useSyncExternalStore } from "react";
 import { REVIEW_BATCH } from "../../../shared/src/srs";
 import { DIRECTIONS, type Direction } from "../../../shared/src/types";
 
-// A boolean setting persisted in AsyncStorage.
-function useBoolSetting(key: string, defaultValue: boolean): [boolean, (v: boolean) => void] {
-  const [value, setValue] = useState(defaultValue);
-  useEffect(() => {
-    AsyncStorage.getItem(key).then((v) => {
-      if (v !== null) setValue(v === "1");
-    });
-  }, [key]);
-  const update = useCallback(
-    (v: boolean) => {
-      setValue(v);
-      AsyncStorage.setItem(key, v ? "1" : "0");
-    },
-    [key],
-  );
-  return [value, update];
+// Settings live in a tiny in-memory reactive store, not per-component state.
+// Every hook that reads a setting subscribes to the same store, so a change made
+// in one screen (e.g. the Settings modal) re-renders every other reader live —
+// including a review session that's already in progress. Values are mirrored to
+// AsyncStorage so they survive a reload, but the store is the source of truth
+// once hydrated. (The old design read storage once per hook on mount, so edits
+// never reached a screen that was already open.)
+
+type Listener = () => void;
+
+interface Store<T> {
+  get: () => T;
+  set: (v: T) => void;
+  subscribe: (l: Listener) => () => void;
 }
 
-// A free-text string setting persisted in AsyncStorage.
-function useStringSetting(key: string, defaultValue: string): [string, (v: string) => void] {
-  const [value, setValue] = useState(defaultValue);
-  useEffect(() => {
-    AsyncStorage.getItem(key).then((v) => {
-      if (v !== null) setValue(v);
+function createStore<T>(
+  key: string,
+  defaultValue: T,
+  decode: (raw: string) => T | undefined,
+  encode: (v: T) => string,
+): Store<T> {
+  let value = defaultValue;
+  let hydrated = false;
+  const listeners = new Set<Listener>();
+  const emit = () => listeners.forEach((l) => l());
+  // The first subscriber triggers a one-time load; when it lands we adopt the
+  // stored value and notify everyone already listening.
+  const hydrate = () => {
+    if (hydrated) return;
+    hydrated = true;
+    AsyncStorage.getItem(key).then((raw) => {
+      if (raw === null) return;
+      const decoded = decode(raw);
+      if (decoded !== undefined) {
+        value = decoded;
+        emit();
+      }
     });
-  }, [key]);
-  const update = useCallback(
-    (v: string) => {
-      setValue(v);
-      AsyncStorage.setItem(key, v);
+  };
+  return {
+    get: () => value,
+    set: (v: T) => {
+      value = v;
+      AsyncStorage.setItem(key, encode(v)).catch(() => {});
+      emit();
     },
-    [key],
-  );
-  return [value, update];
+    subscribe: (l) => {
+      hydrate();
+      listeners.add(l);
+      return () => listeners.delete(l);
+    },
+  };
 }
 
-// A numeric setting persisted in AsyncStorage.
-function useNumberSetting(key: string, defaultValue: number): [number, (v: number) => void] {
-  const [value, setValue] = useState(defaultValue);
-  useEffect(() => {
-    AsyncStorage.getItem(key).then((v) => {
-      const n = v === null ? NaN : Number(v);
-      if (Number.isFinite(n)) setValue(n);
-    });
-  }, [key]);
-  const update = useCallback(
-    (v: number) => {
-      setValue(v);
-      AsyncStorage.setItem(key, String(v));
-    },
-    [key],
-  );
-  return [value, update];
+// getSnapshot is passed as the server snapshot too — there's no SSR here, and a
+// primitive/stable-ref value keeps useSyncExternalStore from looping.
+function useStore<T>(store: Store<T>): T {
+  return useSyncExternalStore(store.subscribe, store.get, store.get);
 }
+
+const boolStore = (key: string, def: boolean) =>
+  createStore<boolean>(
+    key,
+    def,
+    (r) => (r === "1" ? true : r === "0" ? false : undefined),
+    (v) => (v ? "1" : "0"),
+  );
+
+const numberStore = (key: string, def: number) =>
+  createStore<number>(
+    key,
+    def,
+    (r) => (Number.isFinite(Number(r)) ? Number(r) : undefined),
+    String,
+  );
+
+const stringStore = (key: string, def: string) =>
+  createStore<string>(key, def, (r) => r, (v) => v);
 
 // Fuzzy pinyin (default on): reading answers still need tones, but the 2nd and
 // 3rd tone are accepted interchangeably. Off = exact tones required.
 export const DEFAULT_FUZZY_PINYIN = true;
+const fuzzyPinyinStore = boolStore("settings.fuzzyPinyin", DEFAULT_FUZZY_PINYIN);
 export function useFuzzyPinyin(): [boolean, (v: boolean) => void] {
-  return useBoolSetting("settings.fuzzyPinyin", DEFAULT_FUZZY_PINYIN);
+  return [useStore(fuzzyPinyinStore), fuzzyPinyinStore.set];
 }
 
 // Input leniency: the minimum number of matching characters a typed answer needs
@@ -75,12 +101,12 @@ export const DEFAULT_INPUT_LENIENCY: InputLeniency = 1;
 function parseLeniency(raw: string): InputLeniency {
   if (raw === "exact") return "exact";
   const n = Number(raw);
-  return n === 2 || n === 3 || n === 4 || n === 5 ? (n as InputLeniency) : 1;
+  return n === 2 || n === 3 || n === 4 || n === 5 || n === 6 ? (n as InputLeniency) : 1;
 }
 
+const leniencyStore = stringStore("settings.inputLeniency", String(DEFAULT_INPUT_LENIENCY));
 export function useInputLeniency(): [InputLeniency, (v: InputLeniency) => void] {
-  const [raw, setRaw] = useStringSetting("settings.inputLeniency", String(DEFAULT_INPUT_LENIENCY));
-  return [parseLeniency(raw), (v) => setRaw(String(v))];
+  return [parseLeniency(useStore(leniencyStore)), (v) => leniencyStore.set(String(v))];
 }
 
 // Convert a leniency setting to the `minLen` the pinyin/answer matchers expect
@@ -91,33 +117,22 @@ export function leniencyMinLen(l: InputLeniency): number {
 
 // Auto-read (default on) doubles as the app-wide TTS mute switch: when off,
 // completed AI chat replies aren't spoken AND the review screen's automatic
-// audio stays silent. Toggled from the chat input bar's speaker button (the
-// only place it lives now).
+// audio stays silent. Toggled from the chat input bar's speaker button.
 export const DEFAULT_AUTO_SPEAK = true;
-
-// Module mirror of the setting so non-React TTS code (`speak()` in SpeakButton)
-// can honor it without a hook. Seeded from storage on first import and kept in
-// sync by useAutoSpeak.
-let autoSpeakOn = DEFAULT_AUTO_SPEAK;
-AsyncStorage.getItem("settings.autoSpeak").then((v) => {
-  if (v !== null) autoSpeakOn = v === "1";
-});
+const autoSpeakStore = boolStore("settings.autoSpeak", DEFAULT_AUTO_SPEAK);
+// speak() in SpeakButton is non-React and needs the value synchronously, even
+// before any component subscribes — so kick a one-time hydration now.
+autoSpeakStore.subscribe(() => {});
 export function isAutoSpeakOn(): boolean {
-  return autoSpeakOn;
+  return autoSpeakStore.get();
 }
-
 export function useAutoSpeak(): [boolean, (v: boolean) => void] {
-  const [value, setValue] = useBoolSetting("settings.autoSpeak", DEFAULT_AUTO_SPEAK);
-  useEffect(() => {
-    autoSpeakOn = value;
-  }, [value]);
-  return [value, setValue];
+  return [useStore(autoSpeakStore), autoSpeakStore.set];
 }
 
-// App theme: follow the OS ("system") or force light/dark. Unlike the per-screen
-// setting hooks, this is a shared external store — every useTheme() in the tree
-// subscribes, so flipping it in Settings restyles the whole app at once instead
-// of only the screen that changed it. Persisted on-device like everything else.
+// App theme: follow the OS ("system") or force light/dark. Every useTheme() in
+// the tree reads this store, so flipping it in Settings restyles the whole app
+// at once rather than only the screen that changed it.
 export type ThemePref = "system" | "light" | "dark";
 export const THEME_OPTIONS: ThemePref[] = ["system", "light", "dark"];
 export const DEFAULT_THEME_PREF: ThemePref = "system";
@@ -126,40 +141,30 @@ function parseThemePref(raw: string): ThemePref {
   return raw === "light" || raw === "dark" ? raw : "system";
 }
 
-let themePref: ThemePref = DEFAULT_THEME_PREF;
-const themeListeners = new Set<() => void>();
-const emitTheme = () => themeListeners.forEach((l) => l());
-AsyncStorage.getItem("settings.theme").then((v) => {
-  const next = parseThemePref(v ?? "");
-  if (next !== themePref) {
-    themePref = next;
-    emitTheme();
-  }
-});
-
+const themeStore = stringStore("settings.theme", DEFAULT_THEME_PREF);
 export function useThemePref(): [ThemePref, (v: ThemePref) => void] {
-  const value = useSyncExternalStore(
-    (cb) => {
-      themeListeners.add(cb);
-      return () => themeListeners.delete(cb);
-    },
-    () => themePref,
-    () => themePref,
-  );
-  const set = useCallback((v: ThemePref) => {
-    themePref = v;
-    AsyncStorage.setItem("settings.theme", v);
-    emitTheme();
-  }, []);
-  return [value, set];
+  return [parseThemePref(useStore(themeStore)), themeStore.set];
 }
 
 // "Scaffold day time": until a card's SRS interval reaches this many days, it's
 // reviewed with training wheels (pinyin shown, audio auto-played). Purely a
 // review-UI concern — the server's scheduling never reads it.
 export const DEFAULT_SCAFFOLD_MAX_DAYS = 14;
+const scaffoldMaxDaysStore = numberStore("settings.scaffoldMaxDays", DEFAULT_SCAFFOLD_MAX_DAYS);
 export function useScaffoldMaxDays(): [number, (v: number) => void] {
-  return useNumberSetting("settings.scaffoldMaxDays", DEFAULT_SCAFFOLD_MAX_DAYS);
+  return [useStore(scaffoldMaxDaysStore), scaffoldMaxDaysStore.set];
+}
+
+// "Both" transition day: a facet set to Both is a flashcard while the card is
+// young and becomes a typed Input test once its interval reaches this many days.
+// Same UI-only nature as the scaffold cutoff; the server never reads it.
+export const DEFAULT_BOTH_TRANSITION_DAYS = 14;
+const bothTransitionDaysStore = numberStore(
+  "settings.bothTransitionDays",
+  DEFAULT_BOTH_TRANSITION_DAYS,
+);
+export function useBothTransitionDays(): [number, (v: number) => void] {
+  return [useStore(bothTransitionDaysStore), bothTransitionDaysStore.set];
 }
 
 // Review batch size: how many same-type cards are served back-to-back (so you're
@@ -170,17 +175,19 @@ export function useScaffoldMaxDays(): [number, (v: number) => void] {
 // to the shared REVIEW_BATCH default.
 export const REVIEW_BATCH_OPTIONS = [10, 15, 20, 25, 30, 40, 50, 100];
 export const DEFAULT_REVIEW_BATCH = REVIEW_BATCH;
+const reviewBatchStore = numberStore("settings.reviewBatch", DEFAULT_REVIEW_BATCH);
 export function useReviewBatch(): [number, (v: number) => void] {
-  return useNumberSetting("settings.reviewBatch", DEFAULT_REVIEW_BATCH);
+  return [useStore(reviewBatchStore), reviewBatchStore.set];
 }
 
 // The language the user speaks — passed to the chat prompt so the AI falls back
 // to it when glossing a word or explaining something outside Chinese. Default
 // keeps the previously hard-coded bilingual behaviour.
-export function useUserLanguage(): [string, (v: string) => void] {
-  return useStringSetting("settings.userLanguage", DEFAULT_USER_LANGUAGE);
-}
 export const DEFAULT_USER_LANGUAGE = "English & French";
+const userLanguageStore = stringStore("settings.userLanguage", DEFAULT_USER_LANGUAGE);
+export function useUserLanguage(): [string, (v: string) => void] {
+  return [useStore(userLanguageStore), userLanguageStore.set];
+}
 export const LANGUAGE_OPTIONS = [
   "English & French",
   "English",
@@ -193,9 +200,12 @@ export const LANGUAGE_OPTIONS = [
 // How each question type is tested in review:
 //  - "flashcard": show the card, reveal the answer, self-grade (trust the user)
 //  - "input":     the user must type the answer, graded from how many tries
+//  - "both":      flashcard while the card is young, input once it matures — the
+//                 switch happens at the "Both transition day" interval
 // Defaults mirror the original behaviour: meaning is shown, reading & writing
 // are typed.
-export type TestMethod = "flashcard" | "input";
+export type TestMethod = "flashcard" | "both" | "input";
+export const TEST_METHOD_OPTIONS: TestMethod[] = ["flashcard", "both", "input"];
 export const DEFAULT_TEST_METHODS: Record<Direction, TestMethod> = {
   meaning: "flashcard",
   reading: "input",
@@ -203,28 +213,69 @@ export const DEFAULT_TEST_METHODS: Record<Direction, TestMethod> = {
 };
 
 const methodKey = (d: Direction) => `settings.testMethod.${d}`;
+const isMethod = (v: unknown): v is TestMethod =>
+  v === "flashcard" || v === "input" || v === "both";
 
-// All three facets' test methods, loaded once. Used by the review screen (to
-// pick which card to show) and the settings screen (to edit them).
+// The three facets' methods share one reactive object. Per-direction storage
+// keys are kept for backward compatibility, but reads/writes go through the
+// store so the review screen and the settings screen stay in lock-step.
+function createMethodsStore() {
+  let value: Record<Direction, TestMethod> = { ...DEFAULT_TEST_METHODS };
+  let hydrated = false;
+  const listeners = new Set<Listener>();
+  const emit = () => listeners.forEach((l) => l());
+  const hydrate = () => {
+    if (hydrated) return;
+    hydrated = true;
+    Promise.all(DIRECTIONS.map((d) => AsyncStorage.getItem(methodKey(d)))).then((vals) => {
+      const next = { ...value };
+      let changed = false;
+      DIRECTIONS.forEach((d, i) => {
+        if (isMethod(vals[i])) {
+          next[d] = vals[i] as TestMethod;
+          changed = true;
+        }
+      });
+      if (changed) {
+        value = next;
+        emit();
+      }
+    });
+  };
+  return {
+    get: () => value,
+    setOne: (d: Direction, m: TestMethod) => {
+      value = { ...value, [d]: m };
+      AsyncStorage.setItem(methodKey(d), m).catch(() => {});
+      emit();
+    },
+    subscribe: (l: Listener) => {
+      hydrate();
+      listeners.add(l);
+      return () => listeners.delete(l);
+    },
+  };
+}
+const methodsStore = createMethodsStore();
+
+// All three facets' test methods. Used by the review screen (to pick how to show
+// a card) and the settings screen (to edit them).
 export function useTestMethods(): [
   Record<Direction, TestMethod>,
   (d: Direction, m: TestMethod) => void,
 ] {
-  const [methods, setMethods] = useState(DEFAULT_TEST_METHODS);
-  useEffect(() => {
-    Promise.all(DIRECTIONS.map((d) => AsyncStorage.getItem(methodKey(d)))).then((vals) => {
-      setMethods((prev) => {
-        const next = { ...prev };
-        DIRECTIONS.forEach((d, i) => {
-          if (vals[i] === "flashcard" || vals[i] === "input") next[d] = vals[i] as TestMethod;
-        });
-        return next;
-      });
-    });
-  }, []);
-  const update = useCallback((d: Direction, m: TestMethod) => {
-    setMethods((prev) => ({ ...prev, [d]: m }));
-    AsyncStorage.setItem(methodKey(d), m);
-  }, []);
-  return [methods, update];
+  const value = useSyncExternalStore(methodsStore.subscribe, methodsStore.get, methodsStore.get);
+  return [value, methodsStore.setOne];
+}
+
+// Resolve a facet's configured method into the concrete card type to show. A
+// plain flashcard/input passes straight through; "both" is a flashcard while the
+// card's interval is under the transition day, then a typed input once it hits.
+export function resolveMethod(
+  method: TestMethod,
+  intervalDays: number,
+  transitionDays: number,
+): "flashcard" | "input" {
+  if (method !== "both") return method;
+  return intervalDays < transitionDays ? "flashcard" : "input";
 }

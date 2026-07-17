@@ -3,6 +3,7 @@ import React, { useCallback, useEffect, useRef, useState } from "react";
 import {
   ActivityIndicator,
   Keyboard,
+  Modal,
   Platform,
   Pressable,
   ScrollView,
@@ -21,6 +22,8 @@ import { SpeakButton, speak } from "../components/SpeakButton";
 import { api } from "../lib/api";
 import {
   leniencyMinLen,
+  resolveMethod,
+  useBothTransitionDays,
   useFuzzyPinyin,
   useInputLeniency,
   useReviewBatch,
@@ -28,6 +31,7 @@ import {
   useTestMethods,
 } from "../lib/settings";
 import { useTheme, type Theme } from "../theme";
+import { SettingsScreen } from "./SettingsScreen";
 
 const DIRECTION_BADGE = { meaning: "🧠 meaning", reading: "🗣️ reading", writing: "✍️ writing" };
 
@@ -46,13 +50,50 @@ function streakBg(correct: number, baseHue: number, t: Theme): string {
   return `hsl(${hue}, ${sat}%, ${light}%)`;
 }
 
+// The frame every phase renders inside: the streak-tinted background and a top
+// bar whose right end is the Settings gear. `meta` fills the rest of that bar
+// (the card counter and direction badge, when a card is up). Settings sit here
+// because everything in them tunes reviewing — and they stay reachable from the
+// empty and done screens, which is exactly where you'd go to change the batch.
+function ReviewChrome({
+  bg,
+  meta,
+  children,
+}: {
+  bg: string;
+  meta?: React.ReactNode;
+  children: React.ReactNode;
+}) {
+  const insets = useSafeAreaInsets();
+  const [settingsOpen, setSettingsOpen] = useState(false);
+  return (
+    <View style={{ flex: 1, backgroundColor: bg }}>
+      <View style={[styles.topBar, { paddingTop: insets.top + 8 }]}>
+        <View style={{ flex: 1 }}>{meta}</View>
+        <Pressable
+          style={styles.gearButton}
+          hitSlop={10}
+          onPress={() => setSettingsOpen(true)}
+          accessibilityLabel="Settings"
+        >
+          <Text style={{ fontSize: 20 }}>⚙️</Text>
+        </Pressable>
+      </View>
+      {children}
+      <Modal visible={settingsOpen} animationType="slide" onRequestClose={() => setSettingsOpen(false)}>
+        <SettingsScreen onClose={() => setSettingsOpen(false)} />
+      </Modal>
+    </View>
+  );
+}
+
 // Flashcard review only — conversation practice now lives in the Chat tab.
 export function ReviewScreen() {
   const t = useTheme();
-  const insets = useSafeAreaInsets();
   const [fuzzy, setFuzzy] = useFuzzyPinyin();
   const [methods] = useTestMethods();
   const [scaffoldMaxDays] = useScaffoldMaxDays();
+  const [bothTransitionDays] = useBothTransitionDays();
   const [leniency] = useInputLeniency();
   // One knob for the session rhythm: how many same-type cards the server serves
   // in a row AND how many cards between celebration overlays.
@@ -154,105 +195,124 @@ export function ReviewScreen() {
   if (milestone !== null)
     return <MilestoneOverlay count={milestone} onContinue={() => setMilestone(null)} t={t} />;
 
+  const bg = streakBg(correct, baseHue, t);
+
   if (phase === "loading")
     return (
-      <View style={styles.center}>
-        <ActivityIndicator />
-      </View>
+      <ReviewChrome bg={bg}>
+        <View style={styles.center}>
+          <ActivityIndicator />
+        </View>
+      </ReviewChrome>
     );
 
   if (phase === "empty")
     return (
-      <View style={styles.center}>
-        <Text style={{ fontSize: 40 }}>🌤</Text>
-        <Text style={{ color: t.text, fontSize: 18, fontWeight: "600" }}>Nothing due right now</Text>
-        <Text style={{ color: t.subtext, textAlign: "center", paddingHorizontal: 40 }}>
-          Add words from the Chat tab, or come back when reviews are due.
-        </Text>
-        <RetryButton label="Refresh" onPress={load} />
-      </View>
+      <ReviewChrome bg={bg}>
+        <View style={styles.center}>
+          <Text style={{ fontSize: 40 }}>🌤</Text>
+          <Text style={{ color: t.text, fontSize: 18, fontWeight: "600" }}>
+            Nothing due right now
+          </Text>
+          <Text style={{ color: t.subtext, textAlign: "center", paddingHorizontal: 40 }}>
+            Add words from the Chat tab, or come back when reviews are due.
+          </Text>
+          <RetryButton label="Refresh" onPress={load} />
+        </View>
+      </ReviewChrome>
     );
 
   if (phase === "done")
     return (
-      <View style={[styles.center, { backgroundColor: streakBg(correct, baseHue, t) }]}>
-        <Text style={{ fontSize: 40 }}>🎉</Text>
-        <Text style={{ color: t.text, fontSize: 18, fontWeight: "600" }}>
-          Session complete — {reviewed} cards reviewed
-        </Text>
-        {correct > 0 && (
-          <Text style={{ color: t.subtext, fontSize: 15 }}>{correct} answered correctly</Text>
-        )}
-        <RetryButton label="Check for more" onPress={load} />
-      </View>
+      <ReviewChrome bg={bg}>
+        <View style={styles.center}>
+          <Text style={{ fontSize: 40 }}>🎉</Text>
+          <Text style={{ color: t.text, fontSize: 18, fontWeight: "600" }}>
+            Session complete — {reviewed} cards reviewed
+          </Text>
+          {correct > 0 && (
+            <Text style={{ color: t.subtext, fontSize: 15 }}>{correct} answered correctly</Text>
+          )}
+          <RetryButton label="Check for more" onPress={load} />
+        </View>
+      </ReviewChrome>
     );
 
   const item = queue[idx];
   // Young cards get training wheels (pinyin, auto-played audio); mature cards
   // must be answered from the characters alone.
   const scaffold = isScaffolded(item.word.srs, scaffoldMaxDays);
-  const method = methods[item.direction];
+  // A facet set to "both" resolves to flashcard or input based on how mature the
+  // card is; plain flashcard/input pass through unchanged.
+  const method = resolveMethod(methods[item.direction], item.word.srs.intervalDays, bothTransitionDays);
   const view = facetView(item.word, item.direction, scaffold, fuzzy, leniencyMinLen(leniency));
   // Fuzzy only bites on a typed reading test — hide the toggle otherwise.
   const showFuzzyToggle = item.direction === "reading" && method === "input";
   return (
-    <ScrollView
-      style={{ backgroundColor: streakBg(correct, baseHue, t) }}
-      contentContainerStyle={[styles.cardArea, { paddingTop: insets.top + 16 }]}
-      keyboardShouldPersistTaps="handled"
-      keyboardDismissMode="on-drag"
+    <ReviewChrome
+      bg={bg}
+      meta={
+        <View style={styles.metaRow}>
+          <Text style={{ color: t.subtext }}>
+            {Math.min(idx + 1, queue.length)} / {queue.length}
+          </Text>
+          <Text style={{ color: t.subtext }}>{DIRECTION_BADGE[item.direction]}</Text>
+          {showFuzzyToggle ? (
+            <View style={{ flexDirection: "row", alignItems: "center", gap: 4 }}>
+              <Text style={{ color: t.subtext, fontSize: 12 }}>fuzzy</Text>
+              <Switch value={fuzzy} onValueChange={setFuzzy} />
+            </View>
+          ) : (
+            <View style={{ width: 40 }} />
+          )}
+        </View>
+      }
     >
-      {/* Behind everything: tapping the empty area around/below the card drops the
-          keyboard (while typing) and commits a typed card's parked Continue (no-op
-          otherwise). Sits underneath so the card's own buttons keep their taps —
-          and, on web, don't bubble into it. */}
-      <Pressable
-        style={StyleSheet.absoluteFill}
-        onPress={() => {
-          Keyboard.dismiss();
-          continueRef.current?.();
-        }}
-      />
-      {saveError && (
-        <Text style={[styles.saveError, { backgroundColor: t.danger }]}>{saveError}</Text>
-      )}
-      <View style={styles.metaRow}>
-        <Text style={{ color: t.subtext }}>
-          {Math.min(idx + 1, queue.length)} / {queue.length}
-        </Text>
-        <Text style={{ color: t.subtext }}>{DIRECTION_BADGE[item.direction]}</Text>
-        {showFuzzyToggle ? (
-          <View style={{ flexDirection: "row", alignItems: "center", gap: 4 }}>
-            <Text style={{ color: t.subtext, fontSize: 12 }}>fuzzy</Text>
-            <Switch value={fuzzy} onValueChange={setFuzzy} />
-          </View>
-        ) : (
-          <View style={{ width: 60 }} />
+      <ScrollView
+        contentContainerStyle={styles.cardArea}
+        keyboardShouldPersistTaps="handled"
+        keyboardDismissMode="on-drag"
+      >
+        {/* Behind everything: tapping the empty area around/below the card drops the
+            keyboard (while typing) and commits a typed card's parked Continue (no-op
+            otherwise). Sits underneath so the card's own buttons keep their taps —
+            and, on web, don't bubble into it. */}
+        <Pressable
+          style={StyleSheet.absoluteFill}
+          onPress={() => {
+            Keyboard.dismiss();
+            continueRef.current?.();
+          }}
+        />
+        {saveError && (
+          <Text style={[styles.saveError, { backgroundColor: t.danger }]}>{saveError}</Text>
         )}
-      </View>
-      {method === "flashcard" ? (
-        <FlashcardCard
-          key={item.word._id + idx}
-          view={view}
-          word={item.word}
-          srs={item.word.srs}
-          scaffold={scaffold}
-          onGrade={(g) => grade(item, g)}
-          t={t}
-        />
-      ) : (
-        <InputCard
-          key={item.word._id + idx}
-          view={view}
-          word={item.word}
-          srs={item.word.srs}
-          scaffold={scaffold}
-          onGrade={(g) => grade(item, g)}
-          registerContinue={registerContinue}
-          t={t}
-        />
-      )}
-    </ScrollView>
+        {method === "flashcard" ? (
+          <FlashcardCard
+            key={item.word._id + idx}
+            view={view}
+            word={item.word}
+            direction={item.direction}
+            srs={item.word.srs}
+            scaffold={scaffold}
+            onGrade={(g) => grade(item, g)}
+            t={t}
+          />
+        ) : (
+          <InputCard
+            key={item.word._id + idx}
+            view={view}
+            word={item.word}
+            direction={item.direction}
+            srs={item.word.srs}
+            scaffold={scaffold}
+            onGrade={(g) => grade(item, g)}
+            registerContinue={registerContinue}
+            t={t}
+          />
+        )}
+      </ScrollView>
+    </ReviewChrome>
   );
 }
 
@@ -266,8 +326,6 @@ interface FacetView {
   promptSub?: string; // secondary aid under the question, hidden once answered
   promptNote?: string; // e.g. writing's "✍️ write the strokes", hidden once answered
   hint?: string; // optional "show hint" text before answering (writing's comments)
-  answerLines: string[]; // revealed answer; [0] is primary, the rest are subtext
-  answerSize: number;
   match: (guess: string) => boolean; // input grading
   placeholder: string;
   inputSize?: number;
@@ -289,8 +347,6 @@ function facetView(
         promptTop: scaffold ? word.pinyin : undefined,
         question: word.chinese,
         questionSize: 64,
-        answerLines: word.comments ? [word.def_english, word.comments] : [word.def_english],
-        answerSize: 30,
         match: (g) => answerContains(word.def_english, g, minLen),
         placeholder: "meaning",
       };
@@ -300,8 +356,6 @@ function facetView(
         questionSize: 64,
         // Mature reading has no scaffold, so audio (the giveaway) stays off.
         promptSub: scaffold ? word.def_english : undefined,
-        answerLines: [word.pinyin, word.def_english],
-        answerSize: 26,
         match: (g) => pinyinContains(word.pinyin, g, fuzzy, minLen),
         placeholder: fuzzy ? "pinyin (lenient)" : "pinyin",
       };
@@ -313,8 +367,6 @@ function facetView(
         questionSize: 26,
         promptNote: word.learn_writing ? "✍️ write the strokes" : "⌨️ type it",
         hint: word.comments || undefined,
-        answerLines: [word.chinese, word.pinyin],
-        answerSize: 44,
         match: (g) => answerContains(word.chinese, g, minLen),
         placeholder: "中文",
         inputSize: 28,
@@ -322,9 +374,36 @@ function facetView(
   }
 }
 
+// The reveal is the same whatever the direction and whatever the test: the whole
+// word — character, pinyin, meaning, comment — so you always leave a card having
+// seen the full picture. The only thing that varies is that the question isn't
+// repeated: meaning/reading already show the character above, writing the
+// meaning. The character carries the audio here (for meaning/reading the prompt
+// carries it instead, since the character is up there).
+function AnswerBlock({ word, direction, t }: { word: Word; direction: Direction; t: Theme }) {
+  return (
+    <>
+      {direction === "writing" && (
+        <View style={{ flexDirection: "row", alignItems: "center", gap: 10 }}>
+          <Text style={{ fontSize: 44, color: t.text }}>{word.chinese}</Text>
+          <SpeakButton text={word.chinese} size={20} />
+        </View>
+      )}
+      <Text style={[styles.pinyinAnswer, { color: t.subtext }]}>{word.pinyin}</Text>
+      {direction !== "writing" && (
+        <Text style={{ fontSize: 26, color: t.text, textAlign: "center" }}>{word.def_english}</Text>
+      )}
+      {!!word.comments && (
+        <Text style={{ fontSize: 17, color: t.subtext, textAlign: "center" }}>{word.comments}</Text>
+      )}
+    </>
+  );
+}
+
 interface CardProps {
   view: FacetView;
-  word: Word; // only for audio (word.chinese is always what's spoken)
+  word: Word; // the reveal renders straight off this; word.chinese is what's spoken
+  direction: Direction; // which facet is being tested — the reveal skips it as the question
   srs: Srs; // the tested direction's state — used to preview next intervals
   scaffold: boolean;
   onGrade: (grade: Grade) => void;
@@ -335,8 +414,7 @@ interface CardProps {
 }
 
 // The question side, shared by both card types. `answered` hides the scaffold
-// aids (meaning/stroke hints) once the answer is on screen; the pinyin above
-// stays, since it's never the giveaway where it's shown.
+// aids once the answer is on screen — the reveal below carries all of them.
 function PromptBlock({
   view,
   answered,
@@ -352,7 +430,7 @@ function PromptBlock({
 }) {
   return (
     <>
-      {!!view.promptTop && (
+      {!answered && !!view.promptTop && (
         <Text style={[styles.pinyinAbove, { color: t.subtext }]}>{view.promptTop}</Text>
       )}
       <View style={{ flexDirection: "row", alignItems: "center", gap: 14 }}>
@@ -373,7 +451,7 @@ function PromptBlock({
 
 // Show the question, reveal the answer, and trust the user to self-grade. Any
 // direction — the meaning card's original behaviour, generalized.
-function FlashcardCard({ view, word, srs, scaffold, onGrade, t }: CardProps) {
+function FlashcardCard({ view, word, direction, srs, scaffold, onGrade, t }: CardProps) {
   const [flipped, setFlipped] = useState(false);
   // Scaffolded: the word is read aloud up front.
   useEffect(() => {
@@ -383,11 +461,12 @@ function FlashcardCard({ view, word, srs, scaffold, onGrade, t }: CardProps) {
   return (
     <View style={[styles.card, { backgroundColor: t.card }]}>
       {/* The speaker is fair game once scaffolded or flipped; a mature card
-          must be answered before it reads the word aloud. */}
+          must be answered before it reads the word aloud. Writing's prompt is
+          English, so its speaker lives on the revealed character instead. */}
       <PromptBlock
         view={view}
         answered={flipped}
-        showSpeaker={scaffold || flipped}
+        showSpeaker={direction !== "writing" && (scaffold || flipped)}
         speakText={word.chinese}
         t={t}
       />
@@ -403,14 +482,7 @@ function FlashcardCard({ view, word, srs, scaffold, onGrade, t }: CardProps) {
         </Pressable>
       ) : (
         <>
-          <Text style={{ fontSize: view.answerSize, color: t.text, textAlign: "center" }}>
-            {view.answerLines[0]}
-          </Text>
-          {view.answerLines.slice(1).map((line, i) => (
-            <Text key={i} style={{ fontSize: 18, color: t.subtext, textAlign: "center" }}>
-              {line}
-            </Text>
-          ))}
+          <AnswerBlock word={word} direction={direction} t={t} />
           <GradeButtons srs={srs} onGrade={onGrade} t={t} />
         </>
       )}
@@ -540,7 +612,7 @@ function TypedInput({
 
 // Type the answer; the app grades from how many tries it took. Any direction —
 // the reading/writing cards' original behaviour, generalized.
-function InputCard({ view, word, srs, scaffold, onGrade, registerContinue, t }: CardProps) {
+function InputCard({ view, word, direction, srs, scaffold, onGrade, registerContinue, t }: CardProps) {
   const { answer, edit, submit, giveUp, wrongTries, justWrong, outcome } = useTypedAnswer(view.match);
   const [showHint, setShowHint] = useState(false);
 
@@ -552,11 +624,13 @@ function InputCard({ view, word, srs, scaffold, onGrade, registerContinue, t }: 
 
   return (
     <View style={[styles.card, { backgroundColor: t.card }]}>
-      {/* Mature cards: no sound before answering — it would give the answer away */}
+      {/* Mature cards: no sound before answering — it would give the answer away.
+          Once answered the character is fair game, unless it's the writing card's
+          reveal, which carries its own speaker. */}
       <PromptBlock
         view={view}
         answered={!!outcome}
-        showSpeaker={scaffold && !outcome}
+        showSpeaker={direction !== "writing" && (scaffold || !!outcome)}
         speakText={word.chinese}
         t={t}
       />
@@ -585,9 +659,8 @@ function InputCard({ view, word, srs, scaffold, onGrade, registerContinue, t }: 
         <Result
           outcome={outcome}
           tries={wrongTries + 1}
-          lines={view.answerLines}
-          answerSize={view.answerSize}
-          speakText={word.chinese}
+          word={word}
+          direction={direction}
           srs={srs}
           onCommit={onGrade}
           registerContinue={registerContinue}
@@ -604,9 +677,8 @@ function InputCard({ view, word, srs, scaffold, onGrade, registerContinue, t }: 
 function Result({
   outcome,
   tries,
-  lines,
-  answerSize = 26,
-  speakText,
+  word,
+  direction,
   srs,
   onCommit,
   registerContinue,
@@ -614,9 +686,8 @@ function Result({
 }: {
   outcome: { grade: Grade; gaveUp: boolean };
   tries: number;
-  lines: string[];
-  answerSize?: number; // size of the primary answer line (bigger for hanzi)
-  speakText: string;
+  word: Word;
+  direction: Direction;
   srs: Srs;
   onCommit: (grade: Grade) => void;
   registerContinue?: (fn: (() => void) | null) => void;
@@ -626,8 +697,8 @@ function Result({
   const color = gradeColor(t, grade);
   // The revealed answer is always read aloud, right or wrong.
   useEffect(() => {
-    speak(speakText);
-  }, [speakText]);
+    speak(word.chinese);
+  }, [word.chinese]);
   // Park Continue with the screen (for tap-anywhere / Enter) while shown; the
   // capture happens on mount, so it stays the auto-grade even if the user later
   // taps "I actually forgot" (that's an explicit, separate commit).
@@ -638,11 +709,7 @@ function Result({
   }, []);
   return (
     <>
-      <View style={{ flexDirection: "row", alignItems: "center", gap: 10 }}>
-        <Text style={{ fontSize: answerSize, color: t.text }}>{lines[0]}</Text>
-        <SpeakButton text={speakText} size={20} />
-      </View>
-      <Text style={{ fontSize: 18, color: t.subtext }}>{lines[1]}</Text>
+      <AnswerBlock word={word} direction={direction} t={t} />
       <Text style={{ color, fontWeight: "800", fontSize: 16 }}>
         {gaveUp
           ? "Marked as Forgot"
@@ -716,9 +783,12 @@ const styles = StyleSheet.create({
   center: { flex: 1, alignItems: "center", justifyContent: "center", gap: 10 },
   cardArea: { padding: 16, gap: 12, flexGrow: 1 },
   saveError: { color: "#fff", fontSize: 13, borderRadius: 10, padding: 10, overflow: "hidden" },
+  topBar: { flexDirection: "row", alignItems: "center", gap: 8, paddingHorizontal: 16 },
+  gearButton: { padding: 4 },
   metaRow: { flexDirection: "row", justifyContent: "space-between", alignItems: "center" },
   card: { borderRadius: 20, padding: 24, alignItems: "center", gap: 16, minHeight: 320 },
   pinyinAbove: { fontSize: 22, letterSpacing: 1, textAlign: "center", marginBottom: -8 },
+  pinyinAnswer: { fontSize: 24, letterSpacing: 1, textAlign: "center" },
   answerInput: {
     alignSelf: "stretch",
     borderRadius: 12,
