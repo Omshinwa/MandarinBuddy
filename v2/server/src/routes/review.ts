@@ -3,7 +3,7 @@ import { ObjectId } from "mongodb";
 import { REVIEW_BATCH, applyGrade, newFacets, pickFacet, recordFacetAnswer } from "../../../shared/src/srs";
 import { DIRECTIONS } from "../../../shared/src/types";
 import type { Direction, Grade } from "../../../shared/src/types";
-import { serializeWord, words } from "../db";
+import { serializeWord, words, type WordDoc } from "../db";
 
 export const reviewRoute = new Hono();
 
@@ -15,6 +15,22 @@ const GRADES: Grade[] = [
   "conversation_used",
   "conversation_missed",
 ];
+
+// A facet can only be asked if the fields it needs are filled in. Reading tests
+// the pinyin, so a card with no pinyin is never asked for reading; meaning and
+// writing both need the English gloss. This keeps half-filled cards (e.g. a
+// character entered without its pinyin yet) out of the facets they can't answer.
+function facetAnswerable(w: WordDoc, d: Direction): boolean {
+  const has = (s?: string) => !!s && s.trim().length > 0;
+  switch (d) {
+    case "meaning":
+      return has(w.chinese) && has(w.def_english);
+    case "reading":
+      return has(w.chinese) && has(w.pinyin);
+    case "writing":
+      return has(w.chinese) && has(w.def_english);
+  }
+}
 
 // GET /api/review/queue
 // One item per due card. Each card has a single schedule; the question type is
@@ -30,12 +46,23 @@ reviewRoute.get("/queue", async (c) => {
   const batchParam = Number(c.req.query("batch"));
   const batchSize = Number.isInteger(batchParam) && batchParam >= 1 ? batchParam : REVIEW_BATCH;
 
+  // Facets the client will actually test — the ones NOT set to "None" in
+  // Settings, sent as a comma-separated list. Old clients omit it, so default to
+  // all three directions.
+  const dirParam = c.req.query("directions");
+  const enabled: Direction[] = dirParam
+    ? (dirParam.split(",").filter((d) => DIRECTIONS.includes(d as Direction)) as Direction[])
+    : DIRECTIONS;
+
   const items = all
     .filter((w) => w.srs!.due <= nowIso && !w.srs!.suspended)
-    .map((w) => ({
-      word: serializeWord(w),
-      direction: pickFacet(w.facets ?? newFacets()),
-    }));
+    .flatMap((w) => {
+      // Only ask a facet that's both enabled in Settings and answerable from this
+      // card's fields; a card with no eligible facet drops out of the queue.
+      const eligible = enabled.filter((d) => facetAnswerable(w, d));
+      if (eligible.length === 0) return [];
+      return [{ word: serializeWord(w), direction: pickFacet(w.facets ?? newFacets(), eligible) }];
+    });
 
   items.sort(
     (a, b) =>

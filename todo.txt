@@ -18,9 +18,7 @@ SUPERANKI — TODO
     each AI message (tap a chip → reveal pinyin/meaning + apply SRS credit).
     Files: v2/app/src/components/ChatThread.tsx, v2/app/src/components/GlossedText.tsx
 
+None option for the input (dont do those)
 
-Show hint currently is only on the Writing test input.
-Make it universal?
-On all test input, this will then show the word.comments
-and all other infos besides the answer.
-Like for reading, it will show the meaning (like in scaffolding teaching).
+what happens if a card has an empty field? for example if there's no pinyin? will it still be tested for reading?
+

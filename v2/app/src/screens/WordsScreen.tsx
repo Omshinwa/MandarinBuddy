@@ -24,6 +24,12 @@ import { useTheme, type Theme } from "../theme";
 
 const DAY_MS = 24 * 60 * 60 * 1000;
 
+// Strip tone marks / accents so a search for "ai" matches pinyin like "ài".
+// NFD splits an accented letter into base + combining marks, then we drop the marks.
+function fold(s: string): string {
+  return s.toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "");
+}
+
 // A word is a leech when its card got suspended after too many lapses.
 function isLeech(w: Word): boolean {
   return isSuspended(w.srs);
@@ -54,16 +60,16 @@ export function WordsScreen() {
 
   const now = new Date();
   const filtered = useMemo(() => {
-    const q = search.trim().toLowerCase();
+    const q = fold(search.trim());
     return words.filter((w) => {
       if (leechOnly && !isLeech(w)) return false;
       if (bucketFilter !== null && intervalBucket(w.srs.intervalDays) !== bucketFilter) return false;
       if (!q) return true;
       return (
         w.chinese.includes(q) ||
-        w.pinyin.toLowerCase().includes(q) ||
-        w.def_english.toLowerCase().includes(q) ||
-        w.comments.toLowerCase().includes(q)
+        fold(w.pinyin).includes(q) ||
+        fold(w.def_english).includes(q) ||
+        fold(w.comments).includes(q)
       );
     });
   }, [words, search, bucketFilter, leechOnly]);

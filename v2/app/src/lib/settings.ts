@@ -149,7 +149,7 @@ export function useThemePref(): [ThemePref, (v: ThemePref) => void] {
 // "Scaffold day time": until a card's SRS interval reaches this many days, it's
 // reviewed with training wheels (pinyin shown, audio auto-played). Purely a
 // review-UI concern — the server's scheduling never reads it.
-export const DEFAULT_SCAFFOLD_MAX_DAYS = 14;
+export const DEFAULT_SCAFFOLD_MAX_DAYS = 3;
 const scaffoldMaxDaysStore = numberStore("settings.scaffoldMaxDays", DEFAULT_SCAFFOLD_MAX_DAYS);
 export function useScaffoldMaxDays(): [number, (v: number) => void] {
   return [useStore(scaffoldMaxDaysStore), scaffoldMaxDaysStore.set];
@@ -202,19 +202,19 @@ export const LANGUAGE_OPTIONS = [
 //  - "input":     the user must type the answer, graded from how many tries
 //  - "both":      flashcard while the card is young, input once it matures — the
 //                 switch happens at the "Both transition day" interval
-// Defaults mirror the original behaviour: meaning is shown, reading & writing
-// are typed.
-export type TestMethod = "flashcard" | "both" | "input";
-export const TEST_METHOD_OPTIONS: TestMethod[] = ["flashcard", "both", "input"];
+//  - "none":      this facet is never tested — cards are never queued for it
+// Defaults: meaning is shown, reading grows into a typed test, writing is typed.
+export type TestMethod = "flashcard" | "both" | "input" | "none";
+export const TEST_METHOD_OPTIONS: TestMethod[] = ["flashcard", "input", "both", "none"];
 export const DEFAULT_TEST_METHODS: Record<Direction, TestMethod> = {
   meaning: "flashcard",
-  reading: "input",
+  reading: "both",
   writing: "input",
 };
 
 const methodKey = (d: Direction) => `settings.testMethod.${d}`;
 const isMethod = (v: unknown): v is TestMethod =>
-  v === "flashcard" || v === "input" || v === "both";
+  v === "flashcard" || v === "input" || v === "both" || v === "none";
 
 // The three facets' methods share one reactive object. Per-direction storage
 // keys are kept for backward compatibility, but reads/writes go through the
@@ -271,11 +271,13 @@ export function useTestMethods(): [
 // Resolve a facet's configured method into the concrete card type to show. A
 // plain flashcard/input passes straight through; "both" is a flashcard while the
 // card's interval is under the transition day, then a typed input once it hits.
+// "none" facets are never queued, so this only needs a safe fallback for them.
 export function resolveMethod(
   method: TestMethod,
   intervalDays: number,
   transitionDays: number,
 ): "flashcard" | "input" {
-  if (method !== "both") return method;
-  return intervalDays < transitionDays ? "flashcard" : "input";
+  if (method === "input") return "input";
+  if (method === "both") return intervalDays < transitionDays ? "flashcard" : "input";
+  return "flashcard"; // "flashcard" or the never-queued "none"
 }

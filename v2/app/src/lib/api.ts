@@ -61,8 +61,13 @@ export const api = {
   ) =>
     request<Word>(`/api/words/${id}`, { method: "PUT", body: JSON.stringify(patch) }),
   deleteWord: (id: string) => request<{ ok: true }>(`/api/words/${id}`, { method: "DELETE" }),
-  reviewQueue: (batch?: number) =>
-    request<ReviewItem[]>(`/api/review/queue${batch ? `?batch=${batch}` : ""}`),
+  reviewQueue: (batch?: number, directions?: Direction[]) => {
+    const params = new URLSearchParams();
+    if (batch) params.set("batch", String(batch));
+    if (directions && directions.length) params.set("directions", directions.join(","));
+    const qs = params.toString();
+    return request<ReviewItem[]>(`/api/review/queue${qs ? `?${qs}` : ""}`);
+  },
   grade: (wordId: string, direction: Direction, grade: Grade) =>
     request<Word>("/api/review/grade", {
       method: "POST",

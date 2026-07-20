@@ -204,6 +204,18 @@ describe("pickFacet / recordFacetAnswer", () => {
     expect(pickFacet(newFacets())).toBe("meaning");
   });
 
+  it("restricts the pick to the allowed subset (facets set to None / unanswerable are skipped)", () => {
+    const facets = facetsWith({
+      meaning: { strength: 4 },
+      reading: { strength: 2 },
+      writing: { strength: 0 }, // weakest overall, but excluded below
+    });
+    // With writing disabled, the next-weakest allowed facet wins.
+    expect(pickFacet(facets, ["meaning", "reading"])).toBe("reading");
+    // A single allowed facet is always the pick, however strong.
+    expect(pickFacet(facets, ["meaning"])).toBe("meaning");
+  });
+
   it("weighted rotation: the weak facet is asked most, but strong ones still come up", () => {
     // meaning/reading known (strength 1), writing new — the user's own scenario.
     let facets = facetsWith({ meaning: { strength: 1 }, reading: { strength: 1 } });

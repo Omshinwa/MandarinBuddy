@@ -6,9 +6,15 @@ import { serializeWord, words } from "../db";
 
 export const wordsRoute = new Hono();
 
+// Strip tone marks / accents so a search for "ai" matches pinyin like "ài".
+// NFD splits an accented letter into base + combining marks, then we drop the marks.
+function fold(s: string): string {
+  return s.toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "");
+}
+
 // GET /api/words?search=&due=true
 wordsRoute.get("/", async (c) => {
-  const search = c.req.query("search")?.trim().toLowerCase();
+  const search = fold(c.req.query("search")?.trim() ?? "");
   const dueOnly = c.req.query("due") === "true";
   const nowIso = new Date().toISOString();
 
@@ -18,9 +24,9 @@ wordsRoute.get("/", async (c) => {
     if (!search) return true;
     return (
       w.chinese.includes(search) ||
-      (w.pinyin ?? "").toLowerCase().includes(search) ||
-      (w.def_english ?? "").toLowerCase().includes(search) ||
-      (w.comments ?? "").toLowerCase().includes(search)
+      fold(w.pinyin ?? "").includes(search) ||
+      fold(w.def_english ?? "").includes(search) ||
+      fold(w.comments ?? "").includes(search)
     );
   });
   return c.json(filtered.map(serializeWord));

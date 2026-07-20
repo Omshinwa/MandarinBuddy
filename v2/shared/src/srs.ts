@@ -70,9 +70,15 @@ export function bumpStrength(strength: number, grade: Grade): number {
 // Deterministic weighted picker: score = asked + facetBias·strength, lowest wins
 // (ties resolve in DIRECTIONS order). A weak facet (low strength) is asked most,
 // but every ask raises its `asked`, so neglected stronger facets still resurface.
-export function pickFacet(facets: Record<Direction, Facet>): Direction {
+// `allowed` restricts the pick to a subset — the caller passes only the facets
+// that are enabled in Settings and answerable from the card's fields — and must
+// be non-empty.
+export function pickFacet(
+  facets: Record<Direction, Facet>,
+  allowed: readonly Direction[] = DIRECTIONS,
+): Direction {
   const score = (f: Facet) => f.asked + TUNING.facetBias * f.strength;
-  return DIRECTIONS.reduce((best, d) => (score(facets[d]) < score(facets[best]) ? d : best), DIRECTIONS[0]);
+  return allowed.reduce((best, d) => (score(facets[d]) < score(facets[best]) ? d : best), allowed[0]);
 }
 
 // Apply a review answer to the asked facet: its mastery moves via bumpStrength,

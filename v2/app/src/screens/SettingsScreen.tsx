@@ -115,7 +115,7 @@ export function SettingsScreen({ onClose }: { onClose?: () => void }) {
         </View>
       </Section>
 
-      <Section title="Review test method" hint="FLASHCARD: shows the answer and you judge yourself. INPUT: you have to type part of the answer to pass. BOTH: flashcard while the card is young, then Input once it matures." t={t}>
+      <Section title="Review test method" hint="FLASHCARD: shows the answer and you judge yourself. INPUT: you have to type part of the answer to pass. BOTH: flashcard while the card is young, then Input once it matures. NONE: this facet is never tested." t={t}>
 
         {DIRECTIONS.map((d) => (
           <View key={d} style={s.methodRow}>
@@ -124,8 +124,9 @@ export function SettingsScreen({ onClose }: { onClose?: () => void }) {
               value={methods[d]}
               options={[
                 { value: "flashcard", label: "Flashcard" },
-                { value: "both", label: "Both" },
                 { value: "input", label: "Input" },
+                { value: "both", label: "Both" },
+                { value: "none", label: "None" },
               ]}
               onChange={(m) => setMethod(d, m)}
               t={t}
