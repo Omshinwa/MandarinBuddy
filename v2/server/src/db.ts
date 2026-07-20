@@ -1,6 +1,6 @@
 import "dotenv/config";
 import { Collection, MongoClient, ObjectId } from "mongodb";
-import type { ChatMode, Direction, Facet, Srs } from "../../shared/src/types";
+import type { ChatMode, Direction, Facet, FlashcardProposal, Srs } from "../../shared/src/types";
 
 const uri = process.env.MONGODB_URI;
 if (!uri) throw new Error("Set MONGODB_URI in server/.env");
@@ -28,6 +28,11 @@ export interface ChatDoc {
   mode: ChatMode;
   role: "user" | "assistant";
   content: string;
+  // Flashcards this assistant turn proposed. Persisted so history replayed to the
+  // model carries the tool call, not just the prose — otherwise the model reads its
+  // own past turns as "taught a word, called no tool" and stops calling the tool.
+  // Not sent to the client; the /history endpoint only exposes `content`.
+  cards?: FlashcardProposal[];
   createdAt: Date;
 }
 

@@ -1,9 +1,12 @@
+// check le prompt (how language is integrated, because rn it's really bad at following instructions)
+
+
 import { Hono } from "hono";
 import { streamSSE } from "hono/streaming";
 import OpenAI from "openai";
 import { applyGrade } from "../../../shared/src/srs";
 import type { ChatEvent, ChatMode, FlashcardProposal } from "../../../shared/src/types";
-import { chats, words } from "../db";
+import { type ChatDoc, chats, words } from "../db";
 import {
   LOOKUP_CARD_TOOL,
   PROPOSE_FLASHCARD_TOOL,
@@ -148,6 +151,31 @@ function parseFlashcard(raw: string): FlashcardProposal | null {
   }
 }
 
+// Rebuild a stored chat turn into the OpenAI message(s) sent back to the model.
+// A plain turn is one message; an assistant turn that proposed flashcards is
+// expanded into the assistant tool_calls message plus a matching tool result for
+// each card, so the replayed history shows the model actually calling the tool
+// (not just narrating a word). tool_call_id must be unique and paired — we derive
+// it from the doc id so the assistant/tool messages line up.
+function replayHistoryDoc(d: ChatDoc): OpenAI.Chat.Completions.ChatCompletionMessageParam[] {
+  if (d.role !== "assistant" || !d.cards?.length) {
+    return [{ role: d.role, content: d.content }];
+  }
+  const calls = d.cards.map((card, i) => ({
+    id: `h${d._id.toHexString()}_${i}`,
+    type: "function" as const,
+    function: { name: "propose_flashcard", arguments: JSON.stringify(card) },
+  }));
+  return [
+    { role: "assistant", content: d.content || null, tool_calls: calls },
+    ...calls.map((c): OpenAI.Chat.Completions.ChatCompletionMessageParam => ({
+      role: "tool",
+      tool_call_id: c.id,
+      content: "card shown to the user with a one-tap Add button",
+    })),
+  ];
+}
+
 // POST /api/chat  — body {mode, message?, reviewing?, kickoff?}; SSE stream of ChatEvent.
 // kickoff = the user tapped "start review" with no message; we greet them without
 // storing a user turn.
@@ -199,12 +227,7 @@ chatRoute.post("/", async (c) => {
     .toArray();
   const messages: OpenAI.Chat.Completions.ChatCompletionMessageParam[] = [
     { role: "system", content: systemText },
-    ...historyDocs
-      .reverse()
-      .map((d): OpenAI.Chat.Completions.ChatCompletionMessageParam => ({
-        role: d.role,
-        content: d.content,
-      })),
+    ...historyDocs.reverse().flatMap(replayHistoryDoc),
   ];
   // A tapped "start review" has no user text — give the model a cue to greet.
   if (kickoff) messages.push({ role: "user", content: "（开始复习）" });
@@ -219,6 +242,9 @@ chatRoute.post("/", async (c) => {
       }
 
       let assistantText = "";
+      // Cards actually shown this turn — persisted with the assistant doc so the
+      // tool call survives into replayed history (see replayHistoryDoc).
+      const proposedCards: FlashcardProposal[] = [];
       // Tool loop: stream → if the model called propose_flashcard, forward it to the
       // app, append a tool result, and continue the same turn.
       for (let iteration = 0; iteration < 4; iteration++) {
@@ -282,6 +308,7 @@ chatRoute.post("/", async (c) => {
                 result = `"${existing.chinese}" (${existing.def_english}) is already in the user's deck — tell them it's already saved; do not propose it again`;
               } else {
                 await send({ type: "flashcard", card });
+                proposedCards.push(card);
                 result = "card shown to the user with a one-tap Add button";
               }
             }
@@ -296,11 +323,12 @@ chatRoute.post("/", async (c) => {
         }
       }
 
-      if (assistantText.trim()) {
+      if (assistantText.trim() || proposedCards.length > 0) {
         await chats.insertOne({
           mode,
           role: "assistant",
           content: assistantText,
+          ...(proposedCards.length > 0 && { cards: proposedCards }),
           createdAt: new Date(),
         } as never);
       }
