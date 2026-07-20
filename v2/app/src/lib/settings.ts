@@ -205,7 +205,6 @@ export const LANGUAGE_OPTIONS = [
 //  - "none":      this facet is never tested — cards are never queued for it
 // Defaults: meaning is shown, reading grows into a typed test, writing is typed.
 export type TestMethod = "flashcard" | "both" | "input" | "none";
-export const TEST_METHOD_OPTIONS: TestMethod[] = ["flashcard", "input", "both", "none"];
 export const DEFAULT_TEST_METHODS: Record<Direction, TestMethod> = {
   meaning: "flashcard",
   reading: "both",

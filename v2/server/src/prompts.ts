@@ -120,7 +120,7 @@ export function buildVocabBlock(all: WordDoc[], now: Date): string {
   // Most-overdue weak words first so truncation keeps the ones that matter.
   const weak = all
     .filter((w) => isWeak(w, nowIso))
-    .sort((a, b) => (a.srs!.due < b.srs!.due ? -1 : a.srs!.due > b.srs!.due ? 1 : 0));
+    .sort((a, b) => a.srs!.due.localeCompare(b.srs!.due));
   const rest = all.filter((w) => !isWeak(w, nowIso));
 
   // Mature words only get sampled when the deck overflows the limit; keep the

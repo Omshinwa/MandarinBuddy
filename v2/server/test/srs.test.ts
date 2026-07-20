@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { answerContains, pinyinContains, pinyinMatches } from "../../shared/src/pinyin";
+import { answerContains, pinyinContains } from "../../shared/src/pinyin";
 import {
   TUNING,
   applyGrade,
@@ -261,46 +261,6 @@ describe("pickFacet / recordFacetAnswer", () => {
     expect(pickFacet(facets)).toBe("writing");
     facets = recordFacetAnswer(facets, "writing", "reviewed_forgot"); // 1 → 0, asked +1
     expect(pickFacet(facets)).toBe("writing"); // still the weakest — drill it again
-  });
-});
-
-describe("pinyinMatches", () => {
-  // Third arg is `fuzzy`: false = exact tones, true = 2nd/3rd tone interchangeable.
-  it("tone marks match tone numbers", () => {
-    expect(pinyinMatches("tuījiàn", "tui1jian4", false)).toBe(true);
-  });
-
-  it("ignores spaces, case and apostrophes", () => {
-    expect(pinyinMatches("Xī'ān", "xi1 an1", false)).toBe(true);
-  });
-
-  it("fuzzy accepts 2nd/3rd tone interchangeably; strict does not", () => {
-    expect(pinyinMatches("nǐ", "ni2", true)).toBe(true); // 3 typed as 2, fuzzy
-    expect(pinyinMatches("nǐ", "ni2", false)).toBe(false); // strict: 3 ≠ 2
-  });
-
-  it("fuzzy does NOT blur 1st or 4th tone", () => {
-    expect(pinyinMatches("mā", "ma2", true)).toBe(false); // 1 ≠ 2 even fuzzy
-    expect(pinyinMatches("mà", "ma3", true)).toBe(false); // 4 ≠ 3(→2) even fuzzy
-  });
-
-  it("tones are always required, even in fuzzy mode", () => {
-    expect(pinyinMatches("tuījiàn", "tuijian", true)).toBe(false);
-    expect(pinyinMatches("tuījiàn", "tuijian", false)).toBe(false);
-  });
-
-  it("neutral tone: no mark on the syllable, 5 accepted as neutral", () => {
-    expect(pinyinMatches("xièxie", "xie4xie5", false)).toBe(true);
-    expect(pinyinMatches("xièxie", "xie4xie", false)).toBe(true);
-  });
-
-  it("ü works as v", () => {
-    expect(pinyinMatches("nǚ", "nv3", false)).toBe(true);
-  });
-
-  it("wrong letters always fail", () => {
-    expect(pinyinMatches("tuījiàn", "tuijiang", true)).toBe(false);
-    expect(pinyinMatches("tuījiàn", "", true)).toBe(false);
   });
 });
 

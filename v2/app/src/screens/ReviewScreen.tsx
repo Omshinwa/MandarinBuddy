@@ -108,40 +108,34 @@ export function ReviewScreen() {
   const [baseHue, setBaseHue] = useState(() => Math.floor(Math.random() * 360));
   const [saveError, setSaveError] = useState<string | null>(null);
 
-  // Facets not set to "None" — the only ones the server should queue. Keyed as a
-  // string so the queue reloads when a facet is switched on/off, but not on an
-  // unrelated flashcard↔input change.
-  const enabledDirections = DIRECTIONS.filter((d) => methods[d] !== "none");
-  const enabledKey = enabledDirections.join(",");
-
+  // Reloads on any settings change that affects the queue: the batch size, and
+  // the test methods (a facet switched to/from "None" changes what's served, and
+  // any method change resets the session anyway). `methods` is a stable store
+  // reference that only changes when a method is actually edited.
   const load = useCallback(() => {
     setPhase("loading");
     setSaveError(null);
-    const resetCounters = () => {
-      setIdx(0);
-      setReviewed(0);
-      setCorrect(0);
-      setMilestone(null);
-    };
-    // Every facet is "None" → nothing is testable; skip the request entirely.
-    if (enabledDirections.length === 0) {
+    setIdx(0);
+    setReviewed(0);
+    setCorrect(0);
+    setMilestone(null);
+    setBaseHue(Math.floor(Math.random() * 360));
+    // Facets not set to "None" are the only ones the server should queue; if
+    // every facet is None there's nothing to test, so skip the request.
+    const directions = DIRECTIONS.filter((d) => methods[d] !== "none");
+    if (directions.length === 0) {
       setQueue([]);
-      resetCounters();
       setPhase("empty");
       return;
     }
     api
-      .reviewQueue(reviewBatch, enabledDirections)
+      .reviewQueue(reviewBatch, directions)
       .then((items) => {
         setQueue(items);
-        resetCounters();
-        setBaseHue(Math.floor(Math.random() * 360));
         setPhase(items.length ? "active" : "empty");
       })
       .catch(() => setPhase("empty"));
-    // enabledDirections is tracked via its stable string key.
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [reviewBatch, enabledKey]);
+  }, [reviewBatch, methods]);
 
   useEffect(load, [load]);
 

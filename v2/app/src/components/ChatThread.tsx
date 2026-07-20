@@ -178,8 +178,7 @@ export function ChatThread({ mode, placeholder, emptyHint, gloss, onWordAdded, e
             switch (ev.type) {
               case "delta": {
                 replyText += ev.text;
-                const target = assistantId;
-                updateItem(target, (item) =>
+                updateItem(assistantId, (item) =>
                   item.kind === "msg" ? { ...item, content: item.content + ev.text } : item,
                 );
                 break;

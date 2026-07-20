@@ -21,32 +21,17 @@ const HISTORY_TURNS = 30;
 
 export const chatRoute = new Hono();
 
+// Wrap each tool def (from prompts.ts) in OpenAI's function-tool shape. The
+// `strict` flag they carry is intentionally not forwarded — DeepSeek has no
+// strict schema mode, so arguments are validated by hand (see parseFlashcard).
 const TOOLS: OpenAI.Chat.Completions.ChatCompletionTool[] = [
-  {
-    type: "function",
-    function: {
-      name: PROPOSE_FLASHCARD_TOOL.name,
-      description: PROPOSE_FLASHCARD_TOOL.description,
-      parameters: PROPOSE_FLASHCARD_TOOL.input_schema,
-    },
-  },
-  {
-    type: "function",
-    function: {
-      name: LOOKUP_CARD_TOOL.name,
-      description: LOOKUP_CARD_TOOL.description,
-      parameters: LOOKUP_CARD_TOOL.input_schema,
-    },
-  },
-  {
-    type: "function",
-    function: {
-      name: SET_REVIEW_MODE_TOOL.name,
-      description: SET_REVIEW_MODE_TOOL.description,
-      parameters: SET_REVIEW_MODE_TOOL.input_schema,
-    },
-  },
-];
+  PROPOSE_FLASHCARD_TOOL,
+  LOOKUP_CARD_TOOL,
+  SET_REVIEW_MODE_TOOL,
+].map((tool) => ({
+  type: "function",
+  function: { name: tool.name, description: tool.description, parameters: tool.input_schema },
+}));
 
 function parseMode(value: string | undefined): ChatMode | null {
   return value === "assistant" || value === "conversation" ? value : null;
@@ -82,7 +67,7 @@ async function creditUsedWords(message: string, now: Date): Promise<string[]> {
   const all = await words.find({ srs: { $exists: true } }).toArray();
   const credited: string[] = [];
   for (const w of all) {
-    if (!w.chinese || w.chinese.length === 0) continue;
+    if (!w.chinese) continue;
     if (!message.includes(w.chinese)) continue;
     if (w.convCreditDate === today) continue;
     await words.updateOne(
