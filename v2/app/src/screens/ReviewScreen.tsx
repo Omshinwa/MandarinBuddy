@@ -471,6 +471,27 @@ function FlashcardCard({ view, word, direction, srs, scaffold, onGrade, t }: Car
     if (scaffold) speak(word.chinese);
   }, [scaffold, word.chinese]);
 
+  const reveal = useCallback(() => {
+    setFlipped(true);
+    speak(word.chinese); // the answer is always read aloud
+  }, [word.chinese]);
+
+  // On desktop, Enter reveals the answer — the flashcard equivalent of the typed
+  // cards' Enter-to-continue. Only while the question side is up; once flipped,
+  // grading stays a deliberate click. Web-only (no hardware Enter on mobile), and
+  // torn down on flip so it can't fire again.
+  useEffect(() => {
+    if (Platform.OS !== "web" || flipped) return;
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === "Enter") {
+        e.preventDefault();
+        reveal();
+      }
+    };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [flipped, reveal]);
+
   return (
     <View style={[styles.card, { backgroundColor: t.card }]}>
       {/* The speaker is fair game once scaffolded or flipped; a mature card
@@ -486,10 +507,7 @@ function FlashcardCard({ view, word, direction, srs, scaffold, onGrade, t }: Car
       {!flipped ? (
         <Pressable
           style={[styles.primaryButton, { backgroundColor: t.tint }]}
-          onPress={() => {
-            setFlipped(true);
-            speak(word.chinese); // the answer is always read aloud
-          }}
+          onPress={reveal}
         >
           <Text style={styles.primaryButtonText}>Show answer</Text>
         </Pressable>
