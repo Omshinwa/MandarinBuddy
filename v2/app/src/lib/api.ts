@@ -10,6 +10,7 @@ import type {
   Word,
   WordInput,
 } from "../../../shared/src/types";
+import { getAppPassword } from "./settings";
 import { Utf8StreamDecoder } from "./utf8";
 
 function guessBase(): string {
@@ -40,8 +41,14 @@ export class ApiError extends Error {
 
 async function request<T>(path: string, init?: RequestInit): Promise<T> {
   const res = await fetch(`${API_BASE}${path}`, {
-    headers: { "content-type": "application/json" },
     ...init,
+    // Set headers after ...init so the password rides on every request (no caller
+    // passes its own headers today). GETs carry it harmlessly; the server only
+    // checks it on writes.
+    headers: {
+      "content-type": "application/json",
+      "x-app-password": getAppPassword(),
+    },
   });
   if (!res.ok) {
     const body = (await res.json().catch(() => ({}))) as { error?: string };
@@ -89,7 +96,7 @@ export async function streamChat(
 ): Promise<void> {
   const res = await expoFetch(`${API_BASE}/api/chat`, {
     method: "POST",
-    headers: { "content-type": "application/json" },
+    headers: { "content-type": "application/json", "x-app-password": getAppPassword() },
     body: JSON.stringify({
       mode,
       message,

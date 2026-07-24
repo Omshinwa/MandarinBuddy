@@ -10,7 +10,26 @@ import { wordsRoute } from "./routes/words";
 const app = new Hono();
 app.use("*", cors());
 
+// Password gate for anything that changes data. The web app sends whatever
+// password the user typed as the `x-app-password` header; here we compare it to
+// the APP_PASSWORD env var and reject non-matching writes with 401. Reads (GET)
+// and /health stay open — word lists and TTS are loaded as bare URLs that can't
+// carry a header, and reading isn't what we're protecting. If APP_PASSWORD is
+// unset (e.g. local dev) the gate is disabled so nothing breaks. CORS is
+// registered first, so it answers the browser's OPTIONS preflight before this
+// middleware ever runs.
+app.use("/api/*", async (c, next) => {
+  const required = process.env.APP_PASSWORD;
+  if (required && c.req.method !== "GET" && c.req.header("x-app-password") !== required) {
+    return c.json({ error: "unauthorized" }, 401);
+  }
+  await next();
+});
+
 app.get("/health", (c) => c.json({ ok: true }));
+// The login screen posts here to check a password before storing it — reaching
+// this handler at all means the gate above accepted the header.
+app.post("/api/auth/check", (c) => c.json({ ok: true }));
 app.route("/api/words", wordsRoute);
 app.route("/api/review", reviewRoute);
 app.route("/api/chat", chatRoute);

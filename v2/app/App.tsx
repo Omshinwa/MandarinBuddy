@@ -4,6 +4,7 @@ import { StatusBar } from "expo-status-bar";
 import React from "react";
 import { Text } from "react-native";
 import { SafeAreaProvider } from "react-native-safe-area-context";
+import { AuthGate } from "./src/components/AuthGate";
 import { ChatScreen } from "./src/screens/ChatScreen";
 import { ReviewScreen } from "./src/screens/ReviewScreen";
 import { WordsScreen } from "./src/screens/WordsScreen";
@@ -36,31 +37,33 @@ export default function App() {
 
   return (
     <SafeAreaProvider>
-      <NavigationContainer theme={navTheme}>
-        <StatusBar style={t.dark ? "light" : "dark"} />
-        <Tab.Navigator
-          screenOptions={{
-            tabBarActiveTintColor: t.tint,
-            tabBarInactiveTintColor: t.subtext,
-          }}
-        >
-          <Tab.Screen
-            name="Chat"
-            component={ChatScreen}
-            options={{ tabBarIcon: icon("💬"), title: "Chat", headerShown: false }}
-          />
-          <Tab.Screen
-            name="Review"
-            component={ReviewScreen}
-            options={{ tabBarIcon: icon("🎴"), title: "Review", headerShown: false }}
-          />
-          <Tab.Screen
-            name="Words"
-            component={WordsScreen}
-            options={{ tabBarIcon: icon("📚"), title: "Words", headerShown: false }}
-          />
-        </Tab.Navigator>
-      </NavigationContainer>
+      <AuthGate>
+        <NavigationContainer theme={navTheme}>
+          <StatusBar style={t.dark ? "light" : "dark"} />
+          <Tab.Navigator
+            screenOptions={{
+              tabBarActiveTintColor: t.tint,
+              tabBarInactiveTintColor: t.subtext,
+            }}
+          >
+            <Tab.Screen
+              name="Chat"
+              component={ChatScreen}
+              options={{ tabBarIcon: icon("💬"), title: "Chat", headerShown: false }}
+            />
+            <Tab.Screen
+              name="Review"
+              component={ReviewScreen}
+              options={{ tabBarIcon: icon("🎴"), title: "Review", headerShown: false }}
+            />
+            <Tab.Screen
+              name="Words"
+              component={WordsScreen}
+              options={{ tabBarIcon: icon("📚"), title: "Words", headerShown: false }}
+            />
+          </Tab.Navigator>
+        </NavigationContainer>
+      </AuthGate>
     </SafeAreaProvider>
   );
 }

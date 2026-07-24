@@ -83,6 +83,23 @@ const numberStore = (key: string, def: number) =>
 const stringStore = (key: string, def: string) =>
   createStore<string>(key, def, (r) => r, (v) => v);
 
+// The shared site password (mirrors the server's APP_PASSWORD). It's sent as the
+// x-app-password header on every mutating request; the server compares it to its
+// env var and rejects writes that don't match. Stored locally so you only type it
+// once. Empty string = not entered yet, which makes the AuthGate show the login
+// screen. The real secret never lives in this bundle — the app only forwards what
+// the user typed and lets the server decide.
+const appPasswordStore = stringStore("auth.appPassword", "");
+// api.ts's request()/streamChat() read this synchronously (they're not React), so
+// kick a one-time hydration now rather than waiting for a component to subscribe.
+appPasswordStore.subscribe(() => {});
+export function getAppPassword(): string {
+  return appPasswordStore.get();
+}
+export function useAppPassword(): [string, (v: string) => void] {
+  return [useStore(appPasswordStore), appPasswordStore.set];
+}
+
 // Fuzzy pinyin (default on): reading answers still need tones, but the 2nd and
 // 3rd tone are accepted interchangeably. Off = exact tones required.
 export const DEFAULT_FUZZY_PINYIN = true;
