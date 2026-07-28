@@ -295,6 +295,19 @@ export function ChatThread({ mode, placeholder, emptyHint, gloss, onWordAdded, e
             </Text>
           )}
         </View>
+        {/* Long-press doesn't survive mobile web (the browser claims the gesture
+            for text selection), so assistant bubbles carry an explicit ⋯ button
+            that opens the same copy/speak menu. */}
+        {!isUser && (
+          <Pressable
+            style={styles.moreButton}
+            hitSlop={8}
+            onPress={() => setMenuFor(item.content)}
+            accessibilityLabel="Message actions"
+          >
+            <Text style={[styles.moreGlyph, { color: t.subtext }]}>⋯</Text>
+          </Pressable>
+        )}
       </View>
     );
   };
@@ -448,8 +461,18 @@ const styles = StyleSheet.create({
   },
   list: { padding: 12, gap: 8 },
   hint: { textAlign: "center", marginTop: 40, paddingHorizontal: 30, fontSize: 15 },
-  bubbleRow: { flexDirection: "row" },
-  bubble: { maxWidth: "85%", borderRadius: 18, paddingHorizontal: 14, paddingVertical: 10 },
+  // Bottom-aligned so the assistant row's ⋯ button sits level with the bubble's
+  // last line rather than floating beside its middle.
+  bubbleRow: { flexDirection: "row", alignItems: "flex-end" },
+  bubble: {
+    maxWidth: "85%",
+    flexShrink: 1,
+    borderRadius: 18,
+    paddingHorizontal: 14,
+    paddingVertical: 10,
+  },
+  moreButton: { width: 30, height: 34, alignItems: "center", justifyContent: "center" },
+  moreGlyph: { fontSize: 22, lineHeight: 24, fontWeight: "700" },
   credits: { textAlign: "center", fontSize: 13, marginVertical: 2 },
   typing: { fontSize: 24, paddingLeft: 16 },
   inputBar: {

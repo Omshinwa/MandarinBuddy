@@ -254,7 +254,10 @@ chatRoute.post("/", async (c) => {
           tools: TOOLS,
           stream: true,
           max_tokens: 4096,
-          temperature: 1.3, // DeepSeek's recommended setting for conversation
+          // DeepSeek's recommended setting for conversation. Note it also makes
+          // longer non-Chinese passages wobble — French especially, where the
+          // model is weak enough to sample non-words. Lower it if that shows up.
+          temperature: 1.3,
         });
 
         let iterationText = "";
