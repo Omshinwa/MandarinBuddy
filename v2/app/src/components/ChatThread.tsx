@@ -1,4 +1,4 @@
-import React, { useCallback, useEffect, useRef, useState } from "react";
+import React, { useCallback, useEffect, useLayoutEffect, useRef, useState } from "react";
 import * as Clipboard from "expo-clipboard";
 import {
   FlatList,
@@ -17,6 +17,7 @@ import type { ChatMode, FlashcardProposal, Word } from "../../../shared/src/type
 import { api, streamChat } from "../lib/api";
 import { confirm } from "../lib/confirm";
 import { useAutoSpeak, useUserLanguage } from "../lib/settings";
+import { hasHardwareKeyboard, useVisualViewportHeight } from "../lib/web";
 import { useTheme } from "../theme";
 import { FlashcardProposalCard } from "./FlashcardProposalCard";
 import { GlossedText } from "./GlossedText";
@@ -70,6 +71,43 @@ interface GlossConfig {
   onReveal: (word: Word) => void;
 }
 
+// How tall the message box may grow before it starts scrolling instead.
+const INPUT_MAX_HEIGHT = 120;
+
+// A native multiline input is as tall as its content; on the web it's a
+// <textarea>, which is a fixed two rows whatever you type — too tall for the
+// bar's single row (it shoves the buttons around), and it never grows for a long
+// message either. So drive its height from its own content: one row when empty,
+// up to INPUT_MAX_HEIGHT. No-op on native, which already does this.
+function useWebInputAutoGrow(ref: React.RefObject<TextInput | null>, value: string) {
+  useLayoutEffect(() => {
+    const el = ref.current as unknown as HTMLTextAreaElement | null;
+    if (Platform.OS !== "web" || !el?.style) return;
+    el.rows = 1;
+    el.style.height = "auto"; // let it collapse first, so it can shrink as well as grow
+    el.style.height = `${Math.min(el.scrollHeight, INPUT_MAX_HEIGHT)}px`;
+  }, [ref, value]);
+}
+
+// The small glyph buttons in the input bar (clear, mute, mic).
+function IconButton({
+  glyph,
+  label,
+  onPress,
+  style,
+}: {
+  glyph: string;
+  label: string;
+  onPress: () => void;
+  style?: { color?: string; opacity?: number };
+}) {
+  return (
+    <Pressable style={styles.iconButton} hitSlop={6} onPress={onPress} accessibilityLabel={label}>
+      <Text style={[styles.iconGlyph, style]}>{glyph}</Text>
+    </Pressable>
+  );
+}
+
 interface Props {
   mode: ChatMode;
   placeholder: string;
@@ -93,8 +131,11 @@ export function ChatThread({ mode, placeholder, emptyHint, gloss, onWordAdded, e
   const [menuFor, setMenuFor] = useState<string | null>(null);
   const recRef = useRef<Recognition | null>(null);
   const listRef = useRef<FlatList<Item>>(null);
+  const inputRef = useRef<TextInput | null>(null);
   const nextId = useRef(0);
   const newId = () => `i${nextId.current++}`;
+
+  useWebInputAutoGrow(inputRef, input);
 
   // Speech-to-text into the input box: tap 🎤, talk, the transcript fills the
   // field (live), review it, then send. Recognition stops itself on a pause.
@@ -130,8 +171,14 @@ export function ChatThread({ mode, placeholder, emptyHint, gloss, onWordAdded, e
   // Don't leave the mic running if the screen unmounts mid-dictation.
   useEffect(() => () => recRef.current?.stop(), []);
 
-  // Focusing the input opens the keyboard over the thread — scroll the last
-  // message back into view once the keyboard is up so it isn't left hidden.
+  // Focusing the input opens the keyboard over the thread, shrinking the space
+  // the messages have — scroll the last one back into view so it isn't left
+  // hidden underneath. Native reports this as a keyboard event, the web as a
+  // smaller viewport.
+  const viewportHeight = useVisualViewportHeight();
+  useEffect(() => {
+    listRef.current?.scrollToEnd({ animated: true });
+  }, [viewportHeight]);
   useEffect(() => {
     const sub = Keyboard.addListener("keyboardDidShow", () =>
       listRef.current?.scrollToEnd({ animated: true }),
@@ -346,34 +393,28 @@ export function ChatThread({ mode, placeholder, emptyHint, gloss, onWordAdded, e
       />
       <View style={[styles.inputBar, { borderTopColor: t.border, backgroundColor: t.card }]}>
         <View style={styles.iconCluster}>
-          <Pressable
-            style={styles.iconButton}
-            hitSlop={6}
-            onPress={clear}
-            accessibilityLabel="Clear conversation"
-          >
-            <Text style={[styles.iconGlyph, { color: t.subtext }]}>🗑</Text>
-          </Pressable>
-          <Pressable
-            style={styles.iconButton}
-            hitSlop={6}
+          <IconButton glyph="🗑" label="Clear conversation" onPress={clear} style={{ color: t.subtext }} />
+          <IconButton
+            glyph="🗣️"
+            label={autoSpeak ? "Sound on — tap to mute" : "Muted — tap to unmute"}
             onPress={() => setAutoSpeak(!autoSpeak)}
-            accessibilityLabel={autoSpeak ? "Sound on — tap to mute" : "Muted — tap to unmute"}
-          >
-            <Text style={[styles.iconGlyph, { opacity: autoSpeak ? 1 : 0.3 }]}>🗣️</Text>
-          </Pressable>
+            style={{ opacity: autoSpeak ? 1 : 0.3 }}
+          />
         </View>
         <TextInput
+          ref={inputRef}
           style={[styles.input, { backgroundColor: t.inputBg, color: t.text }]}
           value={input}
           onChangeText={setInput}
           placeholder={placeholder}
           placeholderTextColor={t.subtext}
           multiline
-          onSubmitEditing={send}
           onKeyPress={(e) => {
-            // Web: Enter sends, Shift+Enter inserts a newline. Skip while an IME
-            // is composing (typing Chinese) so Enter confirms the candidate instead.
+            // With a real keyboard Enter sends and Shift+Enter makes a newline —
+            // but on a phone Return is the only newline key there is, so it always
+            // inserts one and the ↑ button does the sending. Skip while an IME is
+            // composing (typing Chinese) so Enter confirms the candidate instead.
+            if (!hasHardwareKeyboard) return;
             const ne = e.nativeEvent as unknown as {
               key?: string;
               shiftKey?: boolean;
@@ -386,13 +427,11 @@ export function ChatThread({ mode, placeholder, emptyHint, gloss, onWordAdded, e
           }}
         />
         {speechCtor && (
-          <Pressable
-            hitSlop={8}
+          <IconButton
+            glyph={listening ? "🔴" : "🎤"}
+            label={listening ? "Stop dictation" : "Dictate a message"}
             onPress={toggleMic}
-            accessibilityLabel={listening ? "Stop dictation" : "Dictate a message"}
-          >
-            <Text style={{ fontSize: 20 }}>{listening ? "🔴" : "🎤"}</Text>
-          </Pressable>
+          />
         )}
         <Pressable
           style={[styles.sendButton, { backgroundColor: t.tint, opacity: busy || !input.trim() ? 0.4 : 1 }]}
@@ -495,7 +534,7 @@ const styles = StyleSheet.create({
     paddingTop: 10,
     paddingBottom: 10,
     fontSize: 16,
-    maxHeight: 120,
+    maxHeight: INPUT_MAX_HEIGHT,
   },
   sendButton: {
     width: 36,
