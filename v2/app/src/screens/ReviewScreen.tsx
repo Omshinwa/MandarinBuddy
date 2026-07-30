@@ -4,7 +4,6 @@ import {
   ActivityIndicator,
   Keyboard,
   Modal,
-  Platform,
   Pressable,
   ScrollView,
   StyleSheet,
@@ -31,6 +30,7 @@ import {
   useScaffoldMaxDays,
   useTestMethods,
 } from "../lib/settings";
+import { useWindowKey } from "../lib/web";
 import { useTheme, type Theme } from "../theme";
 import { SettingsScreen } from "./SettingsScreen";
 
@@ -191,17 +191,10 @@ export function ReviewScreen() {
     continueRef.current = fn;
   }, []);
 
-  useEffect(() => {
-    if (Platform.OS !== "web") return;
-    const onKey = (e: KeyboardEvent) => {
-      if (e.key === "Enter" && continueRef.current) {
-        e.preventDefault();
-        continueRef.current();
-      }
-    };
-    window.addEventListener("keydown", onKey);
-    return () => window.removeEventListener("keydown", onKey);
-  }, []);
+  useWindowKey(
+    "Enter",
+    useCallback(() => continueRef.current?.(), []),
+  );
 
   // A milestone takes over the whole screen until dismissed — shown in place of
   // the next card, so it interrupts the flow rather than layering over it.
@@ -478,19 +471,8 @@ function FlashcardCard({ view, word, direction, srs, scaffold, onGrade, t }: Car
 
   // On desktop, Enter reveals the answer — the flashcard equivalent of the typed
   // cards' Enter-to-continue. Only while the question side is up; once flipped,
-  // grading stays a deliberate click. Web-only (no hardware Enter on mobile), and
-  // torn down on flip so it can't fire again.
-  useEffect(() => {
-    if (Platform.OS !== "web" || flipped) return;
-    const onKey = (e: KeyboardEvent) => {
-      if (e.key === "Enter") {
-        e.preventDefault();
-        reveal();
-      }
-    };
-    window.addEventListener("keydown", onKey);
-    return () => window.removeEventListener("keydown", onKey);
-  }, [flipped, reveal]);
+  // grading stays a deliberate click.
+  useWindowKey("Enter", reveal, !flipped);
 
   return (
     <View style={[styles.card, { backgroundColor: t.card }]}>
