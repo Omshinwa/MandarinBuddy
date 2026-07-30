@@ -17,7 +17,7 @@ import type { ChatMode, FlashcardProposal, Word } from "../../../shared/src/type
 import { api, streamChat } from "../lib/api";
 import { confirm } from "../lib/confirm";
 import { useAutoSpeak, useUserLanguage } from "../lib/settings";
-import { hasHardwareKeyboard, useVisualViewportHeight } from "../lib/web";
+import { hasHardwareKeyboard } from "../lib/web";
 import { useTheme } from "../theme";
 import { FlashcardProposalCard } from "./FlashcardProposalCard";
 import { GlossedText } from "./GlossedText";
@@ -171,14 +171,8 @@ export function ChatThread({ mode, placeholder, emptyHint, gloss, onWordAdded, e
   // Don't leave the mic running if the screen unmounts mid-dictation.
   useEffect(() => () => recRef.current?.stop(), []);
 
-  // Focusing the input opens the keyboard over the thread, shrinking the space
-  // the messages have — scroll the last one back into view so it isn't left
-  // hidden underneath. Native reports this as a keyboard event, the web as a
-  // smaller viewport.
-  const viewportHeight = useVisualViewportHeight();
-  useEffect(() => {
-    listRef.current?.scrollToEnd({ animated: true });
-  }, [viewportHeight]);
+  // Focusing the input opens the keyboard over the thread — scroll the last
+  // message back into view once the keyboard is up so it isn't left hidden.
   useEffect(() => {
     const sub = Keyboard.addListener("keyboardDidShow", () =>
       listRef.current?.scrollToEnd({ animated: true }),
