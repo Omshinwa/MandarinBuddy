@@ -107,7 +107,25 @@ export function SettingsScreen({ onClose }: { onClose?: () => void }) {
         </View>
       </Section>
 
-      <Section title="Your language" t={t}>
+      <Section
+        title="Review batch size"
+        hint="How many cards are served in a row before switching exercise and getting a break."
+        t={t}
+      >
+        <View style={s.chips}>
+          {REVIEW_BATCH_OPTIONS.map((n) => (
+            <Chip
+              key={n}
+              label={String(n)}
+              active={reviewBatch === n}
+              onPress={() => setReviewBatch(n)}
+              t={t}
+            />
+          ))}
+        </View>
+      </Section>
+
+      <Section title="Your language" t={t} hint="Recommended is English, other languages aren't as accurate">
         <View style={s.chips}>
           {LANGUAGE_OPTIONS.map((opt) => (
             <Chip key={opt} label={opt} active={language === opt} onPress={() => setLanguage(opt)} t={t} />
@@ -201,24 +219,6 @@ export function SettingsScreen({ onClose }: { onClose?: () => void }) {
               label={`${d}d`}
               active={scaffoldMaxDays === d}
               onPress={() => setScaffoldMaxDays(d)}
-              t={t}
-            />
-          ))}
-        </View>
-      </Section>
-
-      <Section
-        title="Review batch size"
-        hint="How many cards are served in a row before switching exercise and getting a break."
-        t={t}
-      >
-        <View style={s.chips}>
-          {REVIEW_BATCH_OPTIONS.map((n) => (
-            <Chip
-              key={n}
-              label={String(n)}
-              active={reviewBatch === n}
-              onPress={() => setReviewBatch(n)}
               t={t}
             />
           ))}

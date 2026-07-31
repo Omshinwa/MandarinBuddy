@@ -190,7 +190,7 @@ export function useBothTransitionDays(): [number, (v: number) => void] {
 // switch exercise type. The server reads it (passed on the queue request) to
 // group the queue; the review screen reads it to time the milestone. Falls back
 // to the shared REVIEW_BATCH default.
-export const REVIEW_BATCH_OPTIONS = [10, 15, 20, 25, 30, 40, 50, 100];
+export const REVIEW_BATCH_OPTIONS = [5, 10, 15, 20, 25, 30, 40, 50, 100];
 export const DEFAULT_REVIEW_BATCH = REVIEW_BATCH;
 const reviewBatchStore = numberStore("settings.reviewBatch", DEFAULT_REVIEW_BATCH);
 export function useReviewBatch(): [number, (v: number) => void] {
@@ -206,7 +206,6 @@ export function useUserLanguage(): [string, (v: string) => void] {
   return [useStore(userLanguageStore), userLanguageStore.set];
 }
 export const LANGUAGE_OPTIONS = [
-  "English & French",
   "English",
   "Français",
   "Español",
