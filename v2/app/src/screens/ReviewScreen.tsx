@@ -182,6 +182,15 @@ export function ReviewScreen() {
     [idx, reviewed, reviewBatch],
   );
 
+  // "Actually I remember" on a given-up card: nothing is graded — the card keeps
+  // its SRS state (still due) and just goes back to the end of this session's
+  // queue for another try, so a mis-tap on Forgot doesn't cost a lapse.
+  const requeueUngraded = useCallback((item: ReviewItem) => {
+    Haptics.selectionAsync().catch(() => {});
+    setQueue((prev) => [...prev, item]);
+    setIdx((i) => i + 1);
+  }, []);
+
   // A typed card in its answered state parks its "Continue" action here so the
   // user can commit it without aiming for the button — by tapping anywhere in
   // the card area, or (on web) pressing Enter. Null while there's nothing to
@@ -313,6 +322,7 @@ export function ReviewScreen() {
             srs={item.word.srs}
             scaffold={scaffold}
             onGrade={(g) => grade(item, g)}
+            onRequeue={() => requeueUngraded(item)}
             registerContinue={registerContinue}
             t={t}
           />
@@ -413,6 +423,9 @@ interface CardProps {
   srs: Srs; // the tested direction's state — used to preview next intervals
   scaffold: boolean;
   onGrade: (grade: Grade) => void;
+  // Sends the card back to the end of the session queue without grading it —
+  // the typed cards' "Actually I remember" escape hatch. Unused by flashcards.
+  onRequeue?: () => void;
   // Typed cards park their "Continue" here so the screen can fire it on a
   // tap-anywhere / Enter. Unused by flashcards.
   registerContinue?: (fn: (() => void) | null) => void;
@@ -625,7 +638,17 @@ function TypedInput({
 
 // Type the answer; the app grades from how many tries it took. Any direction —
 // the reading/writing cards' original behaviour, generalized.
-function InputCard({ view, word, direction, srs, scaffold, onGrade, registerContinue, t }: CardProps) {
+function InputCard({
+  view,
+  word,
+  direction,
+  srs,
+  scaffold,
+  onGrade,
+  onRequeue,
+  registerContinue,
+  t,
+}: CardProps) {
   const { answer, edit, submit, giveUp, wrongTries, justWrong, outcome } = useTypedAnswer(view.match);
   const [showHint, setShowHint] = useState(false);
 
@@ -676,6 +699,7 @@ function InputCard({ view, word, direction, srs, scaffold, onGrade, registerCont
           direction={direction}
           srs={srs}
           onCommit={onGrade}
+          onRequeue={onRequeue}
           registerContinue={registerContinue}
           t={t}
         />
@@ -686,7 +710,8 @@ function InputCard({ view, word, direction, srs, scaffold, onGrade, registerCont
 
 // Shown once a typed card is answered. The grade was decided by the app (from
 // the try count, or Forgot if they gave up); the user sees which it was and can
-// still knock it down to Forgot before continuing.
+// still knock it down to Forgot before continuing — or, after giving up, take it
+// back and send the card round again ungraded.
 function Result({
   outcome,
   tries,
@@ -694,6 +719,7 @@ function Result({
   direction,
   srs,
   onCommit,
+  onRequeue,
   registerContinue,
   t,
 }: {
@@ -703,6 +729,7 @@ function Result({
   direction: Direction;
   srs: Srs;
   onCommit: (grade: Grade) => void;
+  onRequeue?: () => void;
   registerContinue?: (fn: (() => void) | null) => void;
   t: Theme;
 }) {
@@ -723,14 +750,24 @@ function Result({
   return (
     <>
       <AnswerBlock word={word} direction={direction} t={t} />
-      <Text style={{ color, fontWeight: "800", fontSize: 16 }}>
-        {gaveUp
-          ? "Marked as Forgot"
-          : `${gradeLabel(grade)} — got it in ${tries} ${tries === 1 ? "try" : "tries"}`}
-      </Text>
+      {/* Giving up needs no verdict line — the button below says what it commits. */}
+      {!gaveUp && (
+        <Text style={{ color, fontWeight: "800", fontSize: 16 }}>
+          {gradeLabel(grade)} — got it in {tries} {tries === 1 ? "try" : "tries"}
+        </Text>
+      )}
       <Pressable style={[styles.continueButton, { backgroundColor: color }]} onPress={() => onCommit(grade)}>
-        <Text style={styles.continueButtonText}>Continue · {previewLabel(srs, grade)}</Text>
+        <Text style={styles.continueButtonText}>
+          {gaveUp ? "Mark as Forgot" : `Continue · ${previewLabel(srs, grade)}`}
+        </Text>
       </Pressable>
+      {/* Take back the give-up: no grade is saved, the card just comes round
+          again later this session. */}
+      {gaveUp && !!onRequeue && (
+        <Pressable onPress={onRequeue}>
+          <Text style={{ color: t.subtext }}>← Actually I remember</Text>
+        </Pressable>
+      )}
       {!gaveUp && (
         <Pressable onPress={() => onCommit("reviewed_forgot")}>
           <Text style={{ color: t.subtext }}>I actually forgot →</Text>
