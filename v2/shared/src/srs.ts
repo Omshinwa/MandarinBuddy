@@ -21,11 +21,10 @@ export const TUNING = {
   strengthCap: 8, // ceiling on a facet's mastery level
 };
 
-// One knob for the review session's rhythm: how many of the same question type
-// are served back-to-back (queue batching, so you're not switching keyboards
-// every card) AND how many cards between celebration overlays. Kept equal so a
-// party tends to land right as you finish a batch and switch exercise type.
-// Change this single number (e.g. to 15) to move both together.
+// Upper bound on how many of the same question type are served back-to-back
+// (queue batching, so you're not switching keyboards every card). A facet with
+// fewer due cards than this just yields a shorter run — the client celebrates
+// wherever a run actually ends, so this only caps how long one can get.
 export const REVIEW_BATCH = 15;
 
 const DAY_MS = 24 * 60 * 60 * 1000;
