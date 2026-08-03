@@ -96,8 +96,9 @@ export function ReviewScreen() {
   const [scaffoldMaxDays] = useScaffoldMaxDays();
   const [bothTransitionDays] = useBothTransitionDays();
   const [leniency] = useInputLeniency();
-  // One knob for the session rhythm: how many same-type cards the server serves
-  // in a row AND how many cards between celebration overlays.
+  // Upper bound on how many same-type cards the server serves in a row. The
+  // celebration overlay is driven by where the runs actually end (see `grade`),
+  // not by this number — a facet with fewer due cards yields a shorter run.
   const [reviewBatch] = useReviewBatch();
   const [phase, setPhase] = useState<"loading" | "empty" | "active" | "done">("loading");
   const [queue, setQueue] = useState<ReviewItem[]>([]);
@@ -160,12 +161,8 @@ export function ReviewScreen() {
             ? Haptics.NotificationFeedbackType.Warning
             : Haptics.NotificationFeedbackType.Success;
       Haptics.notificationAsync(feedback).catch(() => {});
-      // Celebrate every `reviewBatch` cards reviewed — the same count as the
-      // server's queue batch, so a party lands as you finish a batch and switch
-      // exercise type — shown in place of the next card.
       const nextReviewed = reviewed + 1;
       setReviewed(nextReviewed);
-      if (nextReviewed % reviewBatch === 0) setMilestone(nextReviewed);
       // A "good" answer (anything but Forgot) still grows the streak color.
       if (g !== "reviewed_forgot") setCorrect((c) => c + 1);
       setQueue((prev) => {
@@ -175,21 +172,38 @@ export function ReviewScreen() {
         const requeue = g === "reviewed_forgot" && !graded.suspended;
         const next = requeue ? [...prev, item] : prev;
         if (idx + 1 >= next.length) setPhase("done");
+        // Celebrate at each change of question type, shown in place of the next
+        // card. A meaning card and a reading card differ only by the badge, so an
+        // unannounced switch mid-session reads as a glitch — the overlay is what
+        // marks it. The boundary is read off the queue rather than counted,
+        // because a run is only *at most* `reviewBatch` long: a facet with fewer
+        // due cards than that ends its run early.
+        else if (next[idx + 1].direction !== item.direction) setMilestone(nextReviewed);
         return next;
       });
       setIdx((i) => i + 1);
     },
-    [idx, reviewed, reviewBatch],
+    [idx, reviewed],
   );
 
   // "Actually I remember" on a given-up card: nothing is graded — the card keeps
   // its SRS state (still due) and just goes back to the end of this session's
   // queue for another try, so a mis-tap on Forgot doesn't cost a lapse.
-  const requeueUngraded = useCallback((item: ReviewItem) => {
-    Haptics.selectionAsync().catch(() => {});
-    setQueue((prev) => [...prev, item]);
-    setIdx((i) => i + 1);
-  }, []);
+  const requeueUngraded = useCallback(
+    (item: ReviewItem) => {
+      Haptics.selectionAsync().catch(() => {});
+      setQueue((prev) => {
+        const next = [...prev, item];
+        // Same type-switch marker as a graded answer: skipping to the next card
+        // can cross a run boundary just as easily. The card wasn't graded, so the
+        // celebration's count doesn't move.
+        if (next[idx + 1].direction !== item.direction) setMilestone(reviewed);
+        return next;
+      });
+      setIdx((i) => i + 1);
+    },
+    [idx, reviewed],
+  );
 
   // A typed card in its answered state parks its "Continue" action here so the
   // user can commit it without aiming for the button — by tapping anywhere in

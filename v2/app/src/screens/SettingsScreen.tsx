@@ -109,7 +109,7 @@ export function SettingsScreen({ onClose }: { onClose?: () => void }) {
 
       <Section
         title="Review batch size"
-        hint="How many cards are served in a row before switching exercise and getting a break."
+        hint="At most how many cards are served in a row before switching exercise and getting a break. A shorter run just means fewer cards of that type were due."
         t={t}
       >
         <View style={s.chips}>

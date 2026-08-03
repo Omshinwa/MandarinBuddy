@@ -184,12 +184,11 @@ export function useBothTransitionDays(): [number, (v: number) => void] {
   return [useStore(bothTransitionDaysStore), bothTransitionDaysStore.set];
 }
 
-// Review batch size: how many same-type cards are served back-to-back (so you're
-// not switching keyboards every card) AND how many cards between celebration
-// overlays — one knob, kept equal so a party lands as you finish a batch and
-// switch exercise type. The server reads it (passed on the queue request) to
-// group the queue; the review screen reads it to time the milestone. Falls back
-// to the shared REVIEW_BATCH default.
+// Review batch size: the most same-type cards served back-to-back, so you're not
+// switching keyboards every card. Only the server reads it (passed on the queue
+// request) to group the queue; a facet with fewer due cards yields a shorter run,
+// and the review screen celebrates wherever a run ends rather than counting to
+// this number. Falls back to the shared REVIEW_BATCH default.
 export const REVIEW_BATCH_OPTIONS = [5, 10, 15, 20, 25, 30, 40, 50, 100];
 export const DEFAULT_REVIEW_BATCH = REVIEW_BATCH;
 const reviewBatchStore = numberStore("settings.reviewBatch", DEFAULT_REVIEW_BATCH);
