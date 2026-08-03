@@ -140,6 +140,26 @@ export function ReviewScreen() {
 
   useEffect(load, [load]);
 
+  // Move past the current card. `requeue` sends it to the back of the session for
+  // another try. The session ends when nothing follows; otherwise a change of
+  // question type raises the celebration in place of the next card — a meaning
+  // card and a reading card differ only by the badge, so an unannounced switch
+  // reads as a glitch. The boundary is read off the queue rather than counted,
+  // because a run is only *at most* `reviewBatch` long: a facet with fewer due
+  // cards than that ends its run early.
+  const advance = useCallback(
+    (item: ReviewItem, requeue: boolean, count: number) => {
+      setQueue((prev) => {
+        const next = requeue ? [...prev, item] : prev;
+        if (idx + 1 >= next.length) setPhase("done");
+        else if (next[idx + 1].direction !== item.direction) setMilestone(count);
+        return next;
+      });
+      setIdx((i) => i + 1);
+    },
+    [idx],
+  );
+
   const grade = useCallback(
     (item: ReviewItem, g: Grade) => {
       // Surface save failures instead of swallowing them: a dropped grade means
@@ -165,44 +185,24 @@ export function ReviewScreen() {
       setReviewed(nextReviewed);
       // A "good" answer (anything but Forgot) still grows the streak color.
       if (g !== "reviewed_forgot") setCorrect((c) => c + 1);
-      setQueue((prev) => {
-        // Forgot → re-show this session, UNLESS this lapse just turned the card
-        // into a leech (suspended) — then it leaves the session for good.
-        const graded = applyGrade(item.word.srs, g, new Date());
-        const requeue = g === "reviewed_forgot" && !graded.suspended;
-        const next = requeue ? [...prev, item] : prev;
-        if (idx + 1 >= next.length) setPhase("done");
-        // Celebrate at each change of question type, shown in place of the next
-        // card. A meaning card and a reading card differ only by the badge, so an
-        // unannounced switch mid-session reads as a glitch — the overlay is what
-        // marks it. The boundary is read off the queue rather than counted,
-        // because a run is only *at most* `reviewBatch` long: a facet with fewer
-        // due cards than that ends its run early.
-        else if (next[idx + 1].direction !== item.direction) setMilestone(nextReviewed);
-        return next;
-      });
-      setIdx((i) => i + 1);
+      // Forgot → re-show this session, UNLESS this lapse just turned the card
+      // into a leech (suspended) — then it leaves the session for good.
+      const graded = applyGrade(item.word.srs, g, new Date());
+      advance(item, g === "reviewed_forgot" && !graded.suspended, nextReviewed);
     },
-    [idx, reviewed],
+    [advance, reviewed],
   );
 
   // "Actually I remember" on a given-up card: nothing is graded — the card keeps
   // its SRS state (still due) and just goes back to the end of this session's
-  // queue for another try, so a mis-tap on Forgot doesn't cost a lapse.
+  // queue for another try, so a mis-tap on Forgot doesn't cost a lapse. Nothing
+  // was answered, so the celebration's count doesn't move.
   const requeueUngraded = useCallback(
     (item: ReviewItem) => {
       Haptics.selectionAsync().catch(() => {});
-      setQueue((prev) => {
-        const next = [...prev, item];
-        // Same type-switch marker as a graded answer: skipping to the next card
-        // can cross a run boundary just as easily. The card wasn't graded, so the
-        // celebration's count doesn't move.
-        if (next[idx + 1].direction !== item.direction) setMilestone(reviewed);
-        return next;
-      });
-      setIdx((i) => i + 1);
+      advance(item, true, reviewed);
     },
-    [idx, reviewed],
+    [advance, reviewed],
   );
 
   // A typed card in its answered state parks its "Continue" action here so the
