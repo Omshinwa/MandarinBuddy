@@ -68,8 +68,8 @@ export function WordsScreen() {
       return (
         w.chinese.includes(q) ||
         fold(w.pinyin).includes(q) ||
-        fold(w.def_english).includes(q) ||
-        fold(w.comments).includes(q)
+        fold(w.def_english).includes(q)
+        // || fold(w.comments).includes(q)
       );
     });
   }, [words, search, bucketFilter, leechOnly]);
