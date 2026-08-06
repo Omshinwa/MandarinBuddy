@@ -20,14 +20,20 @@ function collapseFuzzyTones(s: string): string {
 // marks stay so decomposed pinyin (u + ̌ ) keeps its tone.
 const NOISE_RE = /[^\p{L}\p{N}\p{M}]/gu;
 
+// Case-fold and drop the noise, without any of the tone handling below. Exported
+// so the word-list search can fold its haystack the same way a typed answer is
+// folded — searching "图书馆" should find the card written 图<书>馆.
+export function stripNoise(s: string): string {
+  return s.toLowerCase().replace(NOISE_RE, "");
+}
+
 // Everything a comparison should ignore, in one place: case, noise, and the tone
 // spellings that count as the same sound. Case-folding comes first so the tone
 // tables (all lowercase) never miss an uppercase vowel. Applied to both sides of
 // every match, so a fold can only make the comparison more forgiving, never
 // stricter — which is why hanzi and English answers can run through it too.
 function normalize(s: string, fuzzy = false): string {
-  const clean = s.toLowerCase().replace(NOISE_RE, "");
-  const folded = clean.replace(/[âîôû]/g, (c) => CIRCUMFLEX[c]);
+  const folded = stripNoise(s).replace(/[âîôû]/g, (c) => CIRCUMFLEX[c]);
   return fuzzy ? collapseFuzzyTones(folded) : folded;
 }
 
