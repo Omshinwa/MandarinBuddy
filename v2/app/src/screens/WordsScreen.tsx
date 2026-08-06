@@ -15,7 +15,7 @@ import {
   View,
 } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
-import { BUCKETS, intervalBucket, isSuspended } from "../../../shared/src/srs";
+import { BUCKETS, intervalBucket, isDue, isSuspended } from "../../../shared/src/srs";
 import { DIRECTIONS } from "../../../shared/src/types";
 import type { Word, WordInput } from "../../../shared/src/types";
 import { ApiError, api } from "../lib/api";
@@ -75,6 +75,10 @@ export function WordsScreen() {
   }, [words, search, bucketFilter, leechOnly]);
 
   const leechCount = useMemo(() => words.filter(isLeech).length, [words]);
+
+  // With no search and no filter the list is just "every word you own" — a wall
+  // of rows nobody scrolls. Show the interval distribution instead.
+  const showStats = !search.trim() && bucketFilter === null && !leechOnly;
 
   // If the last leech gets reactivated while its filter is on, drop back to "all"
   // so you're not left staring at an empty list with a vanished chip.
@@ -136,35 +140,45 @@ export function WordsScreen() {
         ))}
       </ScrollView>
 
-      <FlatList
-        data={filtered}
-        keyExtractor={(w) => w._id}
-        contentContainerStyle={{ paddingBottom: 30 }}
-        keyboardShouldPersistTaps="handled"
-        keyboardDismissMode="on-drag"
-        renderItem={({ item }) => {
-          const { text, due } = dueLabel(item, now);
-          return (
-            <Pressable
-              style={[styles.row, { backgroundColor: t.card, borderBottomColor: t.border }]}
-              onPress={() => setSheet({ mode: "edit", word: item })}
-            >
-              <View style={[styles.dot, { backgroundColor: BUCKETS[intervalBucket(item.srs.intervalDays)].color }]} />
-              <View style={{ flex: 1 }}>
-                <Text style={{ fontSize: 22, color: t.text }}>
-                  {item.chinese}
-                  {item.learn_writing ? " ✍️" : ""}
-                  {isLeech(item) ? " 🐢" : ""}
-                </Text>
-                <Text style={{ color: t.subtext }} numberOfLines={1}>
-                  {item.pinyin} — {item.def_english}
-                </Text>
-              </View>
-              <Text style={{ color: due ? t.danger : t.subtext, fontSize: 13 }}>{text}</Text>
-            </Pressable>
-          );
-        }}
-      />
+      {showStats ? (
+        <WordStats
+          words={words}
+          now={now}
+          onPickBucket={(i) => setBucketFilter(i)}
+          onPickLeeches={() => setLeechOnly(true)}
+          t={t}
+        />
+      ) : (
+        <FlatList
+          data={filtered}
+          keyExtractor={(w) => w._id}
+          contentContainerStyle={{ paddingBottom: 30 }}
+          keyboardShouldPersistTaps="handled"
+          keyboardDismissMode="on-drag"
+          renderItem={({ item }) => {
+            const { text, due } = dueLabel(item, now);
+            return (
+              <Pressable
+                style={[styles.row, { backgroundColor: t.card, borderBottomColor: t.border }]}
+                onPress={() => setSheet({ mode: "edit", word: item })}
+              >
+                <View style={[styles.dot, { backgroundColor: BUCKETS[intervalBucket(item.srs.intervalDays)].color }]} />
+                <View style={{ flex: 1 }}>
+                  <Text style={{ fontSize: 22, color: t.text }}>
+                    {item.chinese}
+                    {item.learn_writing ? " ✍️" : ""}
+                    {isLeech(item) ? " 🐢" : ""}
+                  </Text>
+                  <Text style={{ color: t.subtext }} numberOfLines={1}>
+                    {item.pinyin} — {item.def_english}
+                  </Text>
+                </View>
+                <Text style={{ color: due ? t.danger : t.subtext, fontSize: 13 }}>{text}</Text>
+              </Pressable>
+            );
+          }}
+        />
+      )}
 
       {sheet && (
         <WordSheet
@@ -178,6 +192,124 @@ export function WordsScreen() {
         />
       )}
     </View>
+  );
+}
+
+// The "all words, no search" view: how the collection is spread across the
+// interval buckets. Every row is a shortcut into that bucket's filtered list.
+function WordStats({
+  words,
+  now,
+  onPickBucket,
+  onPickLeeches,
+  t,
+}: {
+  words: Word[];
+  now: Date;
+  onPickBucket: (bucket: number) => void;
+  onPickLeeches: () => void;
+  t: Theme;
+}) {
+  const counts = BUCKETS.map(() => 0);
+  let dueCount = 0;
+  let leechCount = 0;
+  let writingCount = 0;
+  for (const w of words) {
+    counts[intervalBucket(w.srs.intervalDays)]++;
+    if (isLeech(w)) leechCount++;
+    else if (isDue(w.srs, now)) dueCount++;
+    if (w.learn_writing) writingCount++;
+  }
+
+  // Bars are scaled against the biggest bucket, not the total — with a few
+  // hundred new words everything else would otherwise be a sliver.
+  const max = Math.max(1, ...counts);
+
+  if (words.length === 0) {
+    return (
+      <View style={styles.statsEmpty}>
+        <Text style={{ color: t.subtext, textAlign: "center" }}>
+          No words yet — tap ＋ to add your first one.
+        </Text>
+      </View>
+    );
+  }
+
+  return (
+    <ScrollView contentContainerStyle={styles.stats} keyboardShouldPersistTaps="handled">
+      <Text style={{ color: t.text, fontSize: 15 }}>
+        <Text style={{ fontWeight: "700" }}>{words.length}</Text> words ·{" "}
+        <Text style={{ color: dueCount > 0 ? t.danger : t.subtext }}>{dueCount} due</Text> ·{" "}
+        <Text style={{ color: t.subtext }}>{writingCount} ✍️</Text>
+      </Text>
+
+      {/* The whole collection as one bar — segment widths are the proportions. */}
+      <View style={styles.spectrum}>
+        {BUCKETS.map((b, i) =>
+          counts[i] > 0 ? (
+            <View key={i} style={[styles.spectrumPart, { flex: counts[i], backgroundColor: b.color }]} />
+          ) : null,
+        )}
+      </View>
+
+      <View style={{ gap: 6 }}>
+        {BUCKETS.map((b, i) => (
+          <StatRow
+            key={i}
+            label={b.label}
+            color={b.color}
+            count={counts[i]}
+            fraction={counts[i] / max}
+            onPress={() => onPickBucket(i)}
+            t={t}
+          />
+        ))}
+        {leechCount > 0 && (
+          <StatRow
+            label="🐢 leech"
+            color="#ffe0e0"
+            count={leechCount}
+            fraction={leechCount / max}
+            onPress={onPickLeeches}
+            t={t}
+          />
+        )}
+      </View>
+
+      <Text style={{ color: t.subtext, fontSize: 12 }}>
+        Tap a bar to list those words, or search above.
+      </Text>
+    </ScrollView>
+  );
+}
+
+function StatRow({
+  label,
+  color,
+  count,
+  fraction,
+  onPress,
+  t,
+}: {
+  label: string;
+  color: string;
+  count: number;
+  fraction: number;
+  onPress: () => void;
+  t: Theme;
+}) {
+  return (
+    <Pressable style={styles.statRow} onPress={onPress} disabled={count === 0}>
+      <Text style={[styles.statLabel, { color: t.subtext }]} numberOfLines={1}>
+        {label}
+      </Text>
+      <View style={[styles.track, { backgroundColor: t.card }]}>
+        {count > 0 && (
+          <View style={[styles.bar, { width: `${Math.max(2, fraction * 100)}%`, backgroundColor: color }]} />
+        )}
+      </View>
+      <Text style={[styles.statCount, { color: count > 0 ? t.text : t.subtext }]}>{count}</Text>
+    </Pressable>
   );
 }
 
@@ -348,6 +480,15 @@ const styles = StyleSheet.create({
     borderBottomWidth: StyleSheet.hairlineWidth,
   },
   dot: { width: 12, height: 12, borderRadius: 6, borderWidth: StyleSheet.hairlineWidth, borderColor: "#8884" },
+  stats: { padding: 14, paddingTop: 6, gap: 14 },
+  statsEmpty: { padding: 30 },
+  spectrum: { flexDirection: "row", height: 10, gap: 2 },
+  spectrumPart: { height: "100%", borderRadius: 3, borderWidth: StyleSheet.hairlineWidth, borderColor: "#8884" },
+  statRow: { flexDirection: "row", alignItems: "center", gap: 8 },
+  statLabel: { width: 54, fontSize: 12, textAlign: "right" },
+  track: { flex: 1, height: 20, borderRadius: 4, overflow: "hidden" },
+  bar: { height: "100%", borderRadius: 4, borderWidth: StyleSheet.hairlineWidth, borderColor: "#8884" },
+  statCount: { width: 42, fontSize: 13, fontVariant: ["tabular-nums"] },
   sheetBackdrop: { flex: 1, justifyContent: "flex-end", backgroundColor: "#0008" },
   sheet: { borderTopLeftRadius: 20, borderTopRightRadius: 20, maxHeight: "88%" },
   input: { borderRadius: 10, paddingHorizontal: 12, paddingVertical: 10, fontSize: 16 },
