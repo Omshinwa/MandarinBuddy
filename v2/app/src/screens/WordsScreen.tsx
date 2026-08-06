@@ -50,6 +50,9 @@ export function WordsScreen() {
   const [search, setSearch] = useState("");
   const [bucketFilter, setBucketFilter] = useState<number | null>(null);
   const [leechOnly, setLeechOnly] = useState(false);
+  // No chip at all is the landing state — that's when the distribution graph
+  // shows. "all" is an explicit chip you pick to get the full list back.
+  const [showAll, setShowAll] = useState(false);
   const [sheet, setSheet] = useState<{ mode: "add" } | { mode: "edit"; word: Word } | null>(null);
 
   const load = useCallback(() => {
@@ -76,9 +79,9 @@ export function WordsScreen() {
 
   const leechCount = useMemo(() => words.filter(isLeech).length, [words]);
 
-  // With no search and no filter the list is just "every word you own" — a wall
-  // of rows nobody scrolls. Show the interval distribution instead.
-  const showStats = !search.trim() && bucketFilter === null && !leechOnly;
+  // Nothing asked for yet: no search, no chip. Listing every word you own would
+  // just be a wall of rows nobody scrolls, so show the interval distribution.
+  const showStats = !search.trim() && !showAll && bucketFilter === null && !leechOnly;
 
   // If the last leech gets reactivated while its filter is on, drop back to "all"
   // so you're not left staring at an empty list with a vanished chip.
@@ -106,8 +109,9 @@ export function WordsScreen() {
         <Chip
           label="all"
           color={t.card}
-          active={bucketFilter === null && !leechOnly}
+          active={showAll}
           onPress={() => {
+            setShowAll((v) => !v);
             setBucketFilter(null);
             setLeechOnly(false);
           }}
@@ -121,6 +125,7 @@ export function WordsScreen() {
             onPress={() => {
               setLeechOnly((v) => !v);
               setBucketFilter(null);
+              setShowAll(false);
             }}
             t={t}
           />
@@ -133,6 +138,7 @@ export function WordsScreen() {
             active={bucketFilter === i && !leechOnly}
             onPress={() => {
               setLeechOnly(false);
+              setShowAll(false);
               setBucketFilter(bucketFilter === i ? null : i);
             }}
             t={t}
