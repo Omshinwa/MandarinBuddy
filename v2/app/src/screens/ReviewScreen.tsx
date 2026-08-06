@@ -107,6 +107,7 @@ export function ReviewScreen() {
   const [reviewed, setReviewed] = useState(0);
   const [correct, setCorrect] = useState(0); // good answers (drives the streak color)
   const [milestone, setMilestone] = useState<number | null>(null); // celebration to show, if any
+  const celebratedAt = useRef(-1); // card count the last celebration went up at
   const [baseHue, setBaseHue] = useState(() => Math.floor(Math.random() * 360));
   const [saveError, setSaveError] = useState<string | null>(null);
 
@@ -121,6 +122,7 @@ export function ReviewScreen() {
     setReviewed(0);
     setCorrect(0);
     setMilestone(null);
+    celebratedAt.current = -1;
     setBaseHue(Math.floor(Math.random() * 360));
     // Facets not set to "None" are the only ones the server should queue; if
     // every facet is None there's nothing to test, so skip the request.
@@ -142,23 +144,33 @@ export function ReviewScreen() {
   useEffect(load, [load]);
 
   // Move past the current card. `requeue` sends it to the back of the session for
-  // another try. The session ends when nothing follows; otherwise a change of
-  // question type raises the celebration in place of the next card — a meaning
-  // card and a reading card differ only by the badge, so an unannounced switch
-  // reads as a glitch. The boundary is read off the queue rather than counted,
-  // because a run is only *at most* `reviewBatch` long: a facet with fewer due
-  // cards than that ends its run early.
+  // another try. The session ends when nothing follows; otherwise the celebration
+  // goes up in place of the next card, on either of two triggers:
+  //   - the question type changes — a meaning card and a reading card differ only
+  //     by the badge, so an unannounced switch reads as a glitch. Read off the
+  //     queue rather than counted, because a run is only *at most* `reviewBatch`
+  //     long: a facet with fewer due cards than that ends its run early.
+  //   - every `reviewBatch` cards regardless. Without this a session that never
+  //     changes type (40 writing cards due and nothing else) has no boundary at
+  //     all and would run to the end with no celebration.
   const advance = useCallback(
     (item: ReviewItem, requeue: boolean, count: number) => {
-      setQueue((prev) => {
-        const next = requeue ? [...prev, item] : prev;
-        if (idx + 1 >= next.length) setPhase("done");
-        else if (next[idx + 1].direction !== item.direction) setMilestone(count);
-        return next;
-      });
+      const next = requeue ? [...queue, item] : queue;
+      if (idx + 1 >= next.length) {
+        setPhase("done");
+      } else {
+        const switchedType = next[idx + 1].direction !== item.direction;
+        // An ungraded requeue re-enters with the count it came in on, so without
+        // the celebratedAt guard it could raise the same milestone a second time.
+        if ((switchedType || count % reviewBatch === 0) && count > 0 && celebratedAt.current !== count) {
+          celebratedAt.current = count;
+          setMilestone(count);
+        }
+      }
+      if (requeue) setQueue(next);
       setIdx((i) => i + 1);
     },
-    [idx],
+    [idx, queue, reviewBatch],
   );
 
   const grade = useCallback(
