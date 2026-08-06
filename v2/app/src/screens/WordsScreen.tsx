@@ -15,7 +15,7 @@ import {
   View,
 } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
-import { BUCKETS, intervalBucket, isDue, isSuspended } from "../../../shared/src/srs";
+import { BUCKETS, intervalBucket, isSuspended } from "../../../shared/src/srs";
 import { DIRECTIONS } from "../../../shared/src/types";
 import type { Word, WordInput } from "../../../shared/src/types";
 import { ApiError, api } from "../lib/api";
@@ -77,14 +77,10 @@ export function WordsScreen() {
   // The distribution lives under the chips as a bar per chip, so the graph is
   // the filter bar rather than a second copy of it.
   const counts = BUCKETS.map(() => 0);
-  let dueCount = 0;
   let leechCount = 0;
-  let writingCount = 0;
   for (const w of words) {
     counts[intervalBucket(w.srs.intervalDays)]++;
     if (isLeech(w)) leechCount++;
-    else if (isDue(w.srs, now)) dueCount++;
-    if (w.learn_writing) writingCount++;
   }
   // Bars are scaled against the biggest bucket, not the total — with a few
   // hundred new words everything else would otherwise be a sliver.
@@ -157,11 +153,6 @@ export function WordsScreen() {
           />
         ))}
       </ScrollView>
-
-      <Text style={[styles.summary, { color: t.subtext }]}>
-        <Text style={{ fontWeight: "700", color: t.text }}>{words.length}</Text> words ·{" "}
-        <Text style={{ color: dueCount > 0 ? t.danger : t.subtext }}>{dueCount} due</Text> · {writingCount} ✍️
-      </Text>
 
       <FlatList
         data={filtered}
@@ -241,7 +232,9 @@ function Chip({
       <View style={[styles.chip, { backgroundColor: color, borderColor: active ? t.tint : "transparent" }]}>
         <Text style={{ fontSize: 12, color: "#333" }}>{label}</Text>
       </View>
-      <View style={[styles.vTrack, { backgroundColor: t.card }]}>
+      {/* Outlined in the same tint as the chip when active — the bar is part of
+          the same button, not decoration sitting next to it. */}
+      <View style={[styles.vTrack, { backgroundColor: t.card, borderColor: active ? t.tint : t.border }]}>
         {segments
           ? segments.map((n, i) =>
               n > 0 ? <View key={i} style={{ flex: n, backgroundColor: BUCKETS[i].color }} /> : null,
@@ -416,16 +409,10 @@ const styles = StyleSheet.create({
   },
   // Bars grow upward from the bottom of the track, so column-reverse also puts
   // the shortest-interval bucket at the base of the stacked "all" bar.
-  vTrack: {
-    height: 46,
-    borderRadius: 4,
-    overflow: "hidden",
-    flexDirection: "column-reverse",
-    borderWidth: StyleSheet.hairlineWidth,
-    borderColor: "#8884",
-  },
+  // Border width matches the chip's and never changes, so selecting a chip
+  // recolors the outline without resizing the bar inside it.
+  vTrack: { height: 46, borderRadius: 4, overflow: "hidden", flexDirection: "column-reverse", borderWidth: 2 },
   vCount: { fontSize: 11, textAlign: "center", fontVariant: ["tabular-nums"] },
-  summary: { fontSize: 13, paddingHorizontal: 14, paddingBottom: 8 },
   row: {
     flexDirection: "row",
     alignItems: "center",
