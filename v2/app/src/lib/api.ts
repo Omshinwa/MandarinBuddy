@@ -6,6 +6,7 @@ import type {
   ChatMode,
   Direction,
   Grade,
+  Kickoff,
   ReviewItem,
   Word,
   WordInput,
@@ -86,13 +87,14 @@ export const api = {
 };
 
 // POST /api/chat and surface each SSE event as it streams in.
-// opts.kickoff starts a review with no user message; opts.reviewing carries the
-// current review-toggle state so the server can drill the user's due words.
+// opts.kickoff opens a turn with no user message — "review" starts a review
+// session, "translate" asks for a sentence to translate; opts.reviewing carries
+// the current review-toggle state so the server can drill the user's due words.
 export async function streamChat(
   mode: ChatMode,
   message: string,
   onEvent: (ev: ChatEvent) => void,
-  opts?: { reviewing?: boolean; kickoff?: boolean; userLanguage?: string },
+  opts?: { reviewing?: boolean; kickoff?: Kickoff; userLanguage?: string },
 ): Promise<void> {
   const res = await expoFetch(`${API_BASE}/api/chat`, {
     method: "POST",

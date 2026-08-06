@@ -13,7 +13,7 @@ import {
   View,
 } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
-import type { ChatMode, FlashcardProposal, Word } from "../../../shared/src/types";
+import type { ChatMode, FlashcardProposal, Kickoff, Word } from "../../../shared/src/types";
 import { api, streamChat } from "../lib/api";
 import { confirm } from "../lib/confirm";
 import { useAutoSpeak, useUserLanguage } from "../lib/settings";
@@ -196,10 +196,11 @@ export function ChatThread({ mode, placeholder, emptyHint, gloss, onWordAdded, e
   const updateItem = (id: string, patch: (item: Item) => Item) =>
     setItems((prev) => prev.map((item) => (item.id === id ? patch(item) : item)));
 
-  // Shared streaming path. A normal turn carries `message`; a review kickoff
-  // carries `kickoff` and no user bubble (the AI just greets and starts).
+  // Shared streaming path. A normal turn carries `message`; a banner tap carries
+  // `kickoff` and no user bubble (the AI just answers — greeting the reviewer, or
+  // handing over a sentence to translate).
   const runStream = useCallback(
-    async ({ message, kickoff }: { message?: string; kickoff?: boolean }) => {
+    async ({ message, kickoff }: { message?: string; kickoff?: Kickoff }) => {
       if (busy) return;
       setBusy(true);
 
@@ -252,7 +253,7 @@ export function ChatThread({ mode, placeholder, emptyHint, gloss, onWordAdded, e
                 break;
             }
           },
-          { reviewing: kickoff ? true : reviewing, kickoff, userLanguage },
+          { reviewing: kickoff === "review" ? true : reviewing, kickoff, userLanguage },
         );
         // Read the finished reply aloud (pinyin/emphasis stripped for speech).
         if (autoSpeak && replyText.trim()) speak(speakableText(replyText));
@@ -287,9 +288,17 @@ export function ChatThread({ mode, placeholder, emptyHint, gloss, onWordAdded, e
       setReviewing(false);
     } else {
       setReviewing(true);
-      runStream({ kickoff: true });
+      runStream({ kickoff: "review" });
     }
   }, [busy, reviewing, runStream]);
+
+  // Tap the translation banner: the AI hands over one English sentence to render
+  // in Chinese. Not a mode — it's a single turn, and the thread carries on from
+  // the answer. During a review session the sentence is built from due words.
+  const askForSentence = useCallback(() => {
+    if (busy) return;
+    runStream({ kickoff: "translate" });
+  }, [busy, runStream]);
 
   const clear = async () => {
     if (!(await confirm("Clear conversation?"))) return;
@@ -360,18 +369,32 @@ export function ChatThread({ mode, placeholder, emptyHint, gloss, onWordAdded, e
       keyboardVerticalOffset={0}
     >
       {enableReview && (
-        <Pressable
-          onPress={toggleReview}
-          disabled={busy}
-          style={[
-            styles.reviewBar,
-            { borderBottomColor: t.border, backgroundColor: reviewing ? t.tint : t.card },
-          ]}
-        >
-          <Text style={{ color: reviewing ? "#fff" : t.subtext, fontWeight: "600", fontSize: 13 }}>
-            {reviewing ? "📖 Reviewing your words — tap to stop" : "📖 Start a review session"}
-          </Text>
-        </Pressable>
+        <>
+          <Pressable
+            onPress={toggleReview}
+            disabled={busy}
+            style={[
+              styles.reviewBar,
+              { borderBottomColor: t.border, backgroundColor: reviewing ? t.tint : t.card },
+            ]}
+          >
+            <Text style={{ color: reviewing ? "#fff" : t.subtext, fontWeight: "600", fontSize: 13 }}>
+              {reviewing ? "📖 Reviewing your words — tap to stop" : "📖 Start a review session"}
+            </Text>
+          </Pressable>
+          <Pressable
+            onPress={askForSentence}
+            disabled={busy}
+            style={[
+              styles.reviewBar,
+              { borderBottomColor: t.border, backgroundColor: t.card, opacity: busy ? 0.5 : 1 },
+            ]}
+          >
+            <Text style={{ color: t.subtext, fontWeight: "600", fontSize: 13 }}>
+              ✍️ Try and translate a sentence
+            </Text>
+          </Pressable>
+        </>
       )}
       {items.length === 0 && (
         <Text style={[styles.hint, { color: t.subtext }]}>{emptyHint}</Text>
