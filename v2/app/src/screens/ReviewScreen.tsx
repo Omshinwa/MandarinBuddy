@@ -615,6 +615,20 @@ function TypedInput({
   fontSize?: number;
   t: Theme;
 }) {
+  const inputRef = useRef<TextInput | null>(null);
+
+  // A wrong answer leaves the field mounted with what you typed still in it, so
+  // put the caret back at the end of it — otherwise the next attempt needs a
+  // click first. (react-native-web is why: it blurs a single-line input on
+  // Enter, which `blurOnSubmit={false}` below turns off; the explicit focus +
+  // caret move covers the case where the miss came from tapping Check instead.)
+  useEffect(() => {
+    if (!justWrong) return;
+    inputRef.current?.focus();
+    const el = inputRef.current as unknown as HTMLInputElement | null;
+    el?.setSelectionRange?.(el.value.length, el.value.length);
+  }, [justWrong, attempt]);
+
   return (
     <>
       {justWrong && (
@@ -623,6 +637,7 @@ function TypedInput({
         </Text>
       )}
       <TextInput
+        ref={inputRef}
         style={[styles.answerInput, { backgroundColor: t.inputBg, color: t.text, fontSize }]}
         value={answer}
         onChangeText={onEdit}
@@ -631,6 +646,7 @@ function TypedInput({
         autoCapitalize="none"
         autoCorrect={false}
         autoFocus
+        blurOnSubmit={false}
         onSubmitEditing={onSubmit}
       />
       {/* Check and Forgot sit together so the give-up option is under the thumb. */}
