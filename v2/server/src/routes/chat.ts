@@ -5,7 +5,7 @@ import { Hono } from "hono";
 import { streamSSE } from "hono/streaming";
 import OpenAI from "openai";
 import { applyGrade } from "../../../shared/src/srs";
-import type { ChatEvent, ChatMode, FlashcardProposal, Kickoff } from "../../../shared/src/types";
+import type { ChatEvent, ChatMode, FlashcardProposal } from "../../../shared/src/types";
 import { type ChatDoc, chats, words } from "../db";
 import {
   LOOKUP_CARD_TOOL,
@@ -176,31 +176,21 @@ function replayHistoryDoc(d: ChatDoc): OpenAI.Chat.Completions.ChatCompletionMes
   ];
 }
 
-// The cue pushed in place of the missing user turn, per kickoff kind.
-const KICKOFF_CUE: Record<Kickoff, string> = {
-  review: "（开始复习）",
-  translate: "（翻译练习）",
-};
-
-function parseKickoff(value: unknown): Kickoff | null {
-  return value === "review" || value === "translate" ? value : null;
-}
-
 // POST /api/chat  — body {mode, message?, reviewing?, kickoff?}; SSE stream of ChatEvent.
+// kickoff = the user tapped "start review" with no message; we greet them without
+// storing a user turn.
 chatRoute.post("/", async (c) => {
   const body = (await c.req.json()) as {
     mode?: string;
     message?: string;
     reviewing?: boolean;
-    kickoff?: string;
+    kickoff?: boolean;
     userLanguage?: string;
   };
   const mode = parseMode(body.mode);
   const message = body.message?.trim();
-  const kickoff = parseKickoff(body.kickoff);
-  // Starting a review implies review mode; a translation challenge doesn't — it
-  // works either way, and only leans on the vocabulary list when a review is on.
-  const reviewing = body.reviewing === true || kickoff === "review";
+  const kickoff = body.kickoff === true;
+  const reviewing = body.reviewing === true || kickoff; // starting a review implies review mode
   // The user's explanation-fallback language (from Settings); default keeps the
   // prior bilingual behaviour if the client sends nothing.
   const userLanguage =
@@ -239,8 +229,8 @@ chatRoute.post("/", async (c) => {
     { role: "system", content: systemText },
     ...historyDocs.reverse().flatMap(replayHistoryDoc),
   ];
-  // A tapped banner has no user text — give the model a cue to act on instead.
-  if (kickoff) messages.push({ role: "user", content: KICKOFF_CUE[kickoff] });
+  // A tapped "start review" has no user text — give the model a cue to greet.
+  if (kickoff) messages.push({ role: "user", content: "（开始复习）" });
 
   return streamSSE(c, async (sse) => {
     const send = (ev: ChatEvent) => sse.writeSSE({ data: JSON.stringify(ev) });

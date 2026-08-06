@@ -88,18 +88,6 @@ REVIEW SESSION IS ACTIVE — this is a conversation, NOT a quiz:
 `
     : ""
 }
-TRANSLATION CHALLENGE — only when the user asks for a sentence to translate, or the app sends （翻译练习）:
-- Reply with ONE short English sentence for them to translate into Chinese.
-${
-    reviewing
-      ? `
-- A review session is running, so build the sentence around the vocabulary list below — work in as many of those words as still sounds natural, preferring the ones marked [weak].`
-      : `
-- No review session is running, so pick a free, everyday sentence — it doesn't have to come from their vocabulary list.`
-  }
-- You MAY hint the words you expect them not to know. NEVER hint a word that IS in the vocabulary list below.
-- When they answer, mark it: say what they got right, correct what was wrong, then show one natural Chinese version. Stop there — do NOT offer or give another sentence, and don't ask if they want one; the user starts each challenge themselves. Just carry on the normal conversation.
-
 Vocabulary list:
 ${vocabBlock}`;
 }

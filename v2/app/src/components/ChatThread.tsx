@@ -13,7 +13,7 @@ import {
   View,
 } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
-import type { ChatMode, FlashcardProposal, Kickoff, Word } from "../../../shared/src/types";
+import type { ChatMode, FlashcardProposal, Word } from "../../../shared/src/types";
 import { api, streamChat } from "../lib/api";
 import { confirm } from "../lib/confirm";
 import { useAutoSpeak, useUserLanguage } from "../lib/settings";
@@ -73,6 +73,12 @@ interface GlossConfig {
 
 // How tall the message box may grow before it starts scrolling instead.
 const INPUT_MAX_HEIGHT = 120;
+
+// What the "translate a sentence" banner types on the user's behalf. It's a
+// plain message, not a server-side mode: the model handles it like any other
+// request, and it stays in the history so the marking turn has the context.
+const TRANSLATE_REQUEST =
+  "Give me an English sentence that I'll translate to Chinese, don't give me hints for the words I'm supposed to learn.";
 
 // A native multiline input is as tall as its content; on the web it's a
 // <textarea>, which is a fixed two rows whatever you type — too tall for the
@@ -196,11 +202,10 @@ export function ChatThread({ mode, placeholder, emptyHint, gloss, onWordAdded, e
   const updateItem = (id: string, patch: (item: Item) => Item) =>
     setItems((prev) => prev.map((item) => (item.id === id ? patch(item) : item)));
 
-  // Shared streaming path. A normal turn carries `message`; a banner tap carries
-  // `kickoff` and no user bubble (the AI just answers — greeting the reviewer, or
-  // handing over a sentence to translate).
+  // Shared streaming path. A normal turn carries `message`; a review kickoff
+  // carries `kickoff` and no user bubble (the AI just greets and starts).
   const runStream = useCallback(
-    async ({ message, kickoff }: { message?: string; kickoff?: Kickoff }) => {
+    async ({ message, kickoff }: { message?: string; kickoff?: boolean }) => {
       if (busy) return;
       setBusy(true);
 
@@ -253,7 +258,7 @@ export function ChatThread({ mode, placeholder, emptyHint, gloss, onWordAdded, e
                 break;
             }
           },
-          { reviewing: kickoff === "review" ? true : reviewing, kickoff, userLanguage },
+          { reviewing: kickoff ? true : reviewing, kickoff, userLanguage },
         );
         // Read the finished reply aloud (pinyin/emphasis stripped for speech).
         if (autoSpeak && replyText.trim()) speak(speakableText(replyText));
@@ -288,16 +293,16 @@ export function ChatThread({ mode, placeholder, emptyHint, gloss, onWordAdded, e
       setReviewing(false);
     } else {
       setReviewing(true);
-      runStream({ kickoff: "review" });
+      runStream({ kickoff: true });
     }
   }, [busy, reviewing, runStream]);
 
-  // Tap the translation banner: the AI hands over one English sentence to render
-  // in Chinese. Not a mode — it's a single turn, and the thread carries on from
-  // the answer. During a review session the sentence is built from due words.
+  // Tap the translation banner: nothing special server-side — it just sends the
+  // request the user would have typed, so it lands as a normal user turn and the
+  // thread carries on from the answer.
   const askForSentence = useCallback(() => {
     if (busy) return;
-    runStream({ kickoff: "translate" });
+    runStream({ message: TRANSLATE_REQUEST });
   }, [busy, runStream]);
 
   const clear = async () => {
