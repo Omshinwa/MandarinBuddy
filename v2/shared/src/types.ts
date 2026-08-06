@@ -53,11 +53,6 @@ export interface ReviewItem {
 
 export type ChatMode = "assistant" | "conversation";
 
-// A chat turn the user opened by tapping a banner rather than typing: "review"
-// starts a review session, "translate" asks the AI for one English sentence to
-// translate into Chinese. Neither stores a user message.
-export type Kickoff = "review" | "translate";
-
 export interface ChatMessage {
   _id?: string;
   mode: ChatMode;
