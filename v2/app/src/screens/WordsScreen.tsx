@@ -74,12 +74,21 @@ export function WordsScreen() {
     });
   }, [words, search, bucketFilter, leechOnly]);
 
-  const leechCount = useMemo(() => words.filter(isLeech).length, [words]);
-
-  // "all" is the resting chip — one is always lit. There the distribution graph
-  // sits on top of the list and scrolls away as you go down. Narrow the view
-  // (chip or search) and it makes no sense any more, so it's gone.
-  const showStats = !search.trim() && bucketFilter === null && !leechOnly;
+  // The distribution lives under the chips as a bar per chip, so the graph is
+  // the filter bar rather than a second copy of it.
+  const counts = BUCKETS.map(() => 0);
+  let dueCount = 0;
+  let leechCount = 0;
+  let writingCount = 0;
+  for (const w of words) {
+    counts[intervalBucket(w.srs.intervalDays)]++;
+    if (isLeech(w)) leechCount++;
+    else if (isDue(w.srs, now)) dueCount++;
+    if (w.learn_writing) writingCount++;
+  }
+  // Bars are scaled against the biggest bucket, not the total — with a few
+  // hundred new words everything else would otherwise be a sliver.
+  const max = Math.max(1, ...counts);
 
   // If the last leech gets reactivated while its filter is on, drop back to "all"
   // so you're not left staring at an empty list with a vanished chip.
@@ -108,22 +117,28 @@ export function WordsScreen() {
           label="all"
           color={t.card}
           active={bucketFilter === null && !leechOnly}
+          count={words.length}
+          // "all" is every bucket at once, so its bar is the whole spectrum
+          // stacked — full height, segments in proportion.
+          segments={counts}
+          t={t}
           onPress={() => {
             setBucketFilter(null);
             setLeechOnly(false);
           }}
-          t={t}
         />
         {leechCount > 0 && (
           <Chip
-            label={`🐢 ${leechCount}`}
+            label="🐢"
             color="#ffe0e0"
             active={leechOnly}
+            count={leechCount}
+            fraction={leechCount / max}
+            t={t}
             onPress={() => {
               setLeechOnly((v) => !v);
               setBucketFilter(null);
             }}
-            t={t}
           />
         )}
         {BUCKETS.map((b, i) => (
@@ -132,14 +147,21 @@ export function WordsScreen() {
             label={b.label}
             color={b.color}
             active={bucketFilter === i && !leechOnly}
+            count={counts[i]}
+            fraction={counts[i] / max}
+            t={t}
             onPress={() => {
               setLeechOnly(false);
               setBucketFilter(bucketFilter === i ? null : i);
             }}
-            t={t}
           />
         ))}
       </ScrollView>
+
+      <Text style={[styles.summary, { color: t.subtext }]}>
+        <Text style={{ fontWeight: "700", color: t.text }}>{words.length}</Text> words ·{" "}
+        <Text style={{ color: dueCount > 0 ? t.danger : t.subtext }}>{dueCount} due</Text> · {writingCount} ✍️
+      </Text>
 
       <FlatList
         data={filtered}
@@ -147,7 +169,11 @@ export function WordsScreen() {
         contentContainerStyle={{ paddingBottom: 30 }}
         keyboardShouldPersistTaps="handled"
         keyboardDismissMode="on-drag"
-        ListHeaderComponent={showStats ? <WordStats words={words} now={now} t={t} /> : null}
+        ListEmptyComponent={
+          <Text style={{ color: t.subtext, textAlign: "center", padding: 30 }}>
+            {words.length === 0 ? "No words yet — tap ＋ to add your first one." : "Nothing here."}
+          </Text>
+        }
         renderItem={({ item }) => {
           const { text, due } = dueLabel(item, now);
           return (
@@ -187,99 +213,46 @@ export function WordsScreen() {
   );
 }
 
-// Header of the "all" list: how the collection is spread across the interval
-// buckets. Read-only — the chips above already filter, so bars that also
-// filtered were the same control twice.
-function WordStats({ words, now, t }: { words: Word[]; now: Date; t: Theme }) {
-  const counts = BUCKETS.map(() => 0);
-  let dueCount = 0;
-  let leechCount = 0;
-  let writingCount = 0;
-  for (const w of words) {
-    counts[intervalBucket(w.srs.intervalDays)]++;
-    if (isLeech(w)) leechCount++;
-    else if (isDue(w.srs, now)) dueCount++;
-    if (w.learn_writing) writingCount++;
-  }
-
-  // Bars are scaled against the biggest bucket, not the total — with a few
-  // hundred new words everything else would otherwise be a sliver.
-  const max = Math.max(1, ...counts);
-
-  if (words.length === 0) {
-    return (
-      <View style={styles.statsEmpty}>
-        <Text style={{ color: t.subtext, textAlign: "center" }}>
-          No words yet — tap ＋ to add your first one.
-        </Text>
-      </View>
-    );
-  }
-
-  return (
-    <View style={styles.stats}>
-      <Text style={{ color: t.text, fontSize: 15 }}>
-        <Text style={{ fontWeight: "700" }}>{words.length}</Text> words ·{" "}
-        <Text style={{ color: dueCount > 0 ? t.danger : t.subtext }}>{dueCount} due</Text> ·{" "}
-        <Text style={{ color: t.subtext }}>{writingCount} ✍️</Text>
-      </Text>
-
-      {/* The whole collection as one bar — segment widths are the proportions. */}
-      <View style={styles.spectrum}>
-        {BUCKETS.map((b, i) =>
-          counts[i] > 0 ? (
-            <View key={i} style={[styles.spectrumPart, { flex: counts[i], backgroundColor: b.color }]} />
-          ) : null,
-        )}
-      </View>
-
-      <View style={{ gap: 6 }}>
-        {BUCKETS.map((b, i) => (
-          <StatRow key={i} label={b.label} color={b.color} count={counts[i]} fraction={counts[i] / max} t={t} />
-        ))}
-        {leechCount > 0 && (
-          <StatRow label="🐢 leech" color="#ffe0e0" count={leechCount} fraction={leechCount / max} t={t} />
-        )}
-      </View>
-    </View>
-  );
-}
-
-function StatRow({
+// A filter chip with its slice of the distribution growing underneath it: the
+// graph and the filter bar are the same control, so neither is a duplicate of
+// the other. `segments` (the "all" chip) stacks every bucket at full height
+// instead of scaling one bar.
+function Chip({
   label,
   color,
+  active,
   count,
   fraction,
+  segments,
+  onPress,
   t,
 }: {
   label: string;
   color: string;
+  active: boolean;
   count: number;
-  fraction: number;
+  fraction?: number;
+  segments?: number[];
+  onPress: () => void;
   t: Theme;
 }) {
   return (
-    <View style={styles.statRow}>
-      <Text style={[styles.statLabel, { color: t.subtext }]} numberOfLines={1}>
-        {label}
-      </Text>
-      <View style={[styles.track, { backgroundColor: t.card }]}>
-        {count > 0 && (
-          <View style={[styles.bar, { width: `${Math.max(2, fraction * 100)}%`, backgroundColor: color }]} />
-        )}
+    <Pressable style={styles.chipCol} onPress={onPress}>
+      <View style={[styles.chip, { backgroundColor: color, borderColor: active ? t.tint : "transparent" }]}>
+        <Text style={{ fontSize: 12, color: "#333" }}>{label}</Text>
       </View>
-      <Text style={[styles.statCount, { color: count > 0 ? t.text : t.subtext }]}>{count}</Text>
-    </View>
-  );
-}
-
-function Chip({ label, color, active, onPress, t }: { label: string; color: string; active: boolean; onPress: () => void; t: Theme }) {
-  return (
-    <Pressable
-      style={[styles.chip, { backgroundColor: color, borderColor: active ? t.tint : "transparent", borderWidth: 2 }]}
-      onPress={onPress}
-    >
-      <Text style={{ fontSize: 12, color: "#333" }}>{label}</Text>
+      <View style={[styles.vTrack, { backgroundColor: t.card }]}>
+        {segments
+          ? segments.map((n, i) =>
+              n > 0 ? <View key={i} style={{ flex: n, backgroundColor: BUCKETS[i].color }} /> : null,
+            )
+          : count > 0 && (
+              // Floor the height so a bucket holding one word still reads as
+              // present rather than as an empty track.
+              <View style={{ height: `${Math.max(4, (fraction ?? 0) * 100)}%`, backgroundColor: color }} />
+            )}
+      </View>
+      <Text style={[styles.vCount, { color: count > 0 ? t.text : t.subtext }]}>{count}</Text>
     </Pressable>
   );
 }
@@ -429,8 +402,30 @@ const styles = StyleSheet.create({
   header: { flexDirection: "row", gap: 10, padding: 12, paddingBottom: 6 },
   search: { flex: 1, borderRadius: 10, paddingHorizontal: 12, paddingVertical: 9, fontSize: 16 },
   addButton: { width: 42, height: 42, borderRadius: 12, alignItems: "center", justifyContent: "center" },
-  chips: { gap: 6, paddingHorizontal: 12, paddingBottom: 8 },
-  chip: { borderRadius: 14, paddingHorizontal: 10, paddingVertical: 4 },
+  chips: { gap: 6, paddingHorizontal: 12, paddingBottom: 8, alignItems: "flex-start" },
+  chipCol: { alignItems: "stretch", gap: 3 },
+  // Fixed height, not padding: an emoji label is taller than a text one, and
+  // uneven chips would leave the bars below them out of line with each other.
+  chip: {
+    height: 26,
+    borderRadius: 14,
+    paddingHorizontal: 10,
+    borderWidth: 2,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  // Bars grow upward from the bottom of the track, so column-reverse also puts
+  // the shortest-interval bucket at the base of the stacked "all" bar.
+  vTrack: {
+    height: 46,
+    borderRadius: 4,
+    overflow: "hidden",
+    flexDirection: "column-reverse",
+    borderWidth: StyleSheet.hairlineWidth,
+    borderColor: "#8884",
+  },
+  vCount: { fontSize: 11, textAlign: "center", fontVariant: ["tabular-nums"] },
+  summary: { fontSize: 13, paddingHorizontal: 14, paddingBottom: 8 },
   row: {
     flexDirection: "row",
     alignItems: "center",
@@ -440,15 +435,6 @@ const styles = StyleSheet.create({
     borderBottomWidth: StyleSheet.hairlineWidth,
   },
   dot: { width: 12, height: 12, borderRadius: 6, borderWidth: StyleSheet.hairlineWidth, borderColor: "#8884" },
-  stats: { padding: 14, paddingTop: 6, gap: 14 },
-  statsEmpty: { padding: 30 },
-  spectrum: { flexDirection: "row", height: 10, gap: 2 },
-  spectrumPart: { height: "100%", borderRadius: 3, borderWidth: StyleSheet.hairlineWidth, borderColor: "#8884" },
-  statRow: { flexDirection: "row", alignItems: "center", gap: 8 },
-  statLabel: { width: 54, fontSize: 12, textAlign: "right" },
-  track: { flex: 1, height: 20, borderRadius: 4, overflow: "hidden" },
-  bar: { height: "100%", borderRadius: 4, borderWidth: StyleSheet.hairlineWidth, borderColor: "#8884" },
-  statCount: { width: 42, fontSize: 13, fontVariant: ["tabular-nums"] },
   sheetBackdrop: { flex: 1, justifyContent: "flex-end", backgroundColor: "#0008" },
   sheet: { borderTopLeftRadius: 20, borderTopRightRadius: 20, maxHeight: "88%" },
   input: { borderRadius: 10, paddingHorizontal: 12, paddingVertical: 10, fontSize: 16 },
