@@ -1,5 +1,10 @@
 import { describe, expect, it } from "vitest";
-import { answerContains, pinyinContains } from "../../shared/src/pinyin";
+import {
+  answerContains,
+  answerVerdict,
+  pinyinContains,
+  pinyinVerdict,
+} from "../../shared/src/pinyin";
 import {
   TUNING,
   applyGrade,
@@ -367,6 +372,21 @@ describe("input leniency (minLen)", () => {
 
   it("still requires the guess to actually appear", () => {
     expect(answerContains("图书馆", "图店", 2)).toBe(false); // long enough, not a substring
+  });
+
+  it("tells a too-short-but-correct guess apart from a wrong one", () => {
+    expect(answerVerdict("图书馆", "图", 2)).toBe("partial"); // right chars, not enough of them
+    expect(answerVerdict("图书馆", "图店", 2)).toBe("miss"); // not in the answer at all
+    expect(answerVerdict("图书馆", "图书", 2)).toBe("match");
+    expect(pinyinVerdict("qíguài", "qí", false, 4)).toBe("partial");
+    expect(pinyinVerdict("qíguài", "qí", false, Infinity)).toBe("partial"); // exact mode too
+    expect(pinyinVerdict("qíguài", "zh", false, 4)).toBe("miss");
+  });
+
+  it("never reports partial at the most lenient setting", () => {
+    expect(answerVerdict("图书馆", "图", 1)).toBe("match");
+    expect(answerVerdict("好", "好", 3)).toBe("match"); // capped at the answer's length
+    expect(answerVerdict("图书馆", "", 2)).toBe("miss"); // empty is a miss, not a partial
   });
 
   it("exact (Infinity) demands the whole answer", () => {

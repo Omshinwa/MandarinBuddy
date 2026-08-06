@@ -13,7 +13,7 @@ import {
   View,
 } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
-import { answerContains, pinyinContains } from "../../../shared/src/pinyin";
+import { answerVerdict, pinyinVerdict, type MatchVerdict } from "../../../shared/src/pinyin";
 import { applyGrade, isScaffolded } from "../../../shared/src/srs";
 import { DIRECTIONS } from "../../../shared/src/types";
 import type { Direction, Grade, ReviewItem, Srs, Word } from "../../../shared/src/types";
@@ -356,7 +356,7 @@ interface FacetView {
   promptSub?: string; // secondary aid under the question, hidden once answered
   promptNote?: string; // e.g. writing's "✍️ write the strokes", hidden once answered
   hint?: string; // optional "show hint" text before answering (writing's comments)
-  match: (guess: string) => boolean; // input grading
+  check: (guess: string) => MatchVerdict; // input grading
   placeholder: string;
   inputSize?: number;
 }
@@ -377,7 +377,7 @@ function facetView(
         promptTop: scaffold ? word.pinyin : undefined,
         question: word.chinese,
         questionSize: 64,
-        match: (g) => answerContains(word.def_english, g, minLen),
+        check: (g) => answerVerdict(word.def_english, g, minLen),
         placeholder: "meaning",
       };
     case "reading":
@@ -386,7 +386,7 @@ function facetView(
         questionSize: 64,
         // Mature reading has no scaffold, so audio (the giveaway) stays off.
         promptSub: scaffold ? word.def_english : undefined,
-        match: (g) => pinyinContains(word.pinyin, g, fuzzy, minLen),
+        check: (g) => pinyinVerdict(word.pinyin, g, fuzzy, minLen),
         placeholder: fuzzy ? "pinyin (lenient)" : "pinyin",
       };
     case "writing":
@@ -397,7 +397,7 @@ function facetView(
         questionSize: 26,
         promptNote: word.learn_writing ? "✍️ write the strokes" : "⌨️ type it",
         hint: word.comments || undefined,
-        match: (g) => answerContains(word.chinese, g, minLen),
+        check: (g) => answerVerdict(word.chinese, g, minLen),
         placeholder: "中文",
         inputSize: 28,
       };
@@ -562,10 +562,12 @@ function gradeColor(t: Theme, g: Grade): string {
 // the card — it bumps the try count and lets the user keep going until they
 // either type a match or give up (the red Forgot button). `outcome` is null
 // while still answering.
-function useTypedAnswer(match: (guess: string) => boolean) {
+function useTypedAnswer(check: (guess: string) => MatchVerdict) {
   const [answer, setAnswer] = useState("");
   const [wrongTries, setWrongTries] = useState(0);
-  const [justWrong, setJustWrong] = useState(false); // last submit missed → "try again" nudge
+  // Verdict of the last submit, cleared as soon as the user edits again. null =
+  // nothing to nudge about; "partial" earns a friendlier message than "miss".
+  const [lastMiss, setLastMiss] = useState<"partial" | "miss" | null>(null);
   const [outcome, setOutcome] = useState<{ grade: Grade; gaveUp: boolean } | null>(null);
 
   const giveUp = () => {
@@ -575,7 +577,8 @@ function useTypedAnswer(match: (guess: string) => boolean) {
   const submit = () => {
     // Submitting an empty field (e.g. just hitting Enter) counts as giving up.
     if (!answer.trim()) return giveUp();
-    if (match(answer)) {
+    const verdict = check(answer);
+    if (verdict === "match") {
       // Dismiss the keyboard BEFORE unmounting the focused input: on the new
       // architecture, swapping it out under an open keyboard leaves the buttons
       // that replace it unresponsive to taps.
@@ -583,14 +586,14 @@ function useTypedAnswer(match: (guess: string) => boolean) {
       setOutcome({ grade: gradeForTries(wrongTries + 1), gaveUp: false });
     } else {
       setWrongTries((n) => n + 1);
-      setJustWrong(true);
+      setLastMiss(verdict);
     }
   };
   const edit = (text: string) => {
     setAnswer(text);
-    setJustWrong(false);
+    setLastMiss(null);
   };
-  return { answer, edit, submit, giveUp, wrongTries, justWrong, outcome };
+  return { answer, edit, submit, giveUp, wrongTries, lastMiss, outcome };
 }
 
 // The input + Check + red Forgot controls, shared by both typed cards.
@@ -599,7 +602,7 @@ function TypedInput({
   onEdit,
   onSubmit,
   onGiveUp,
-  justWrong,
+  lastMiss,
   attempt,
   placeholder,
   fontSize,
@@ -609,13 +612,14 @@ function TypedInput({
   onEdit: (text: string) => void;
   onSubmit: () => void;
   onGiveUp: () => void;
-  justWrong: boolean;
+  lastMiss: "partial" | "miss" | null; // why the previous submit didn't pass
   attempt: number; // 1-based number of the attempt now being typed
   placeholder: string;
   fontSize?: number;
   t: Theme;
 }) {
   const inputRef = useRef<TextInput | null>(null);
+  const justWrong = lastMiss !== null;
 
   // A wrong answer leaves the field mounted with what you typed still in it, so
   // put the caret back at the end of it — otherwise the next attempt needs a
@@ -631,11 +635,17 @@ function TypedInput({
 
   return (
     <>
-      {justWrong && (
+      {/* A "partial" guess really is inside the answer — it only fell short of the
+          leniency setting — so it gets encouragement, not a red ✗. */}
+      {lastMiss === "partial" ? (
+        <Text style={{ color: t.warning, fontWeight: "600" }}>
+          You have part of the answer! (attempt {attempt})
+        </Text>
+      ) : lastMiss === "miss" ? (
         <Text style={{ color: t.danger, fontWeight: "600" }}>
           ✗ Not quite — try again (attempt {attempt})
         </Text>
-      )}
+      ) : null}
       <TextInput
         ref={inputRef}
         style={[styles.answerInput, { backgroundColor: t.inputBg, color: t.text, fontSize }]}
@@ -679,7 +689,7 @@ function InputCard({
   registerContinue,
   t,
 }: CardProps) {
-  const { answer, edit, submit, giveUp, wrongTries, justWrong, outcome } = useTypedAnswer(view.match);
+  const { answer, edit, submit, giveUp, wrongTries, lastMiss, outcome } = useTypedAnswer(view.check);
   const [showHint, setShowHint] = useState(false);
 
   // Scaffolded: the word is read aloud up front (for reading that turns it into
@@ -715,7 +725,7 @@ function InputCard({
           onEdit={edit}
           onSubmit={submit}
           onGiveUp={giveUp}
-          justWrong={justWrong}
+          lastMiss={lastMiss}
           attempt={wrongTries + 1}
           placeholder={view.placeholder}
           fontSize={view.inputSize}

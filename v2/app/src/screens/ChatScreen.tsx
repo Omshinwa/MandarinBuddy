@@ -36,7 +36,7 @@ export function ChatScreen() {
       // two rows tall on a phone and pushes the buttons out of the bar.
       placeholder="Ask or chat in 中文…"
       emptyHint={
-        "Your Chinese tutor & chat partner 🇨🇳\n\nAsk about anything, or just chat in Chinese to practice — the AI weaves in your vocabulary. Tap a highlighted word if you forget it.\n\nTap “Start a review session” to drill your due words."
+        "Your Chinese tutor & chat partner 🇨🇳\n\nAsk about anything, or just chat in Chinese to practice — the AI weaves in your vocabulary. Tap a highlighted word if you forget it.\n\nTap “Start a review session” to drill your due words, or “Try and translate a sentence” for a sentence to put into Chinese."
       }
       gloss={{ words: glossWords, onReveal }}
       onWordAdded={loadWords}
