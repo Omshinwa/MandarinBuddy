@@ -286,6 +286,11 @@ describe("pinyinContains (lenient reading match)", () => {
     expect(pinyinContains("qǐng", "qîng", false)).toBe(true);
   });
 
+  it("case-folds before folding tones, so an uppercase circumflex still matches", () => {
+    expect(pinyinContains("nǐ hǎo", "NÎ", false)).toBe(true); // NÎ → nî → nǐ
+    expect(pinyinContains("Nǐ Hǎo", "nǐhǎo", false)).toBe(true);
+  });
+
   it("fuzzy makes 2nd and 3rd tones interchangeable inside the substring", () => {
     expect(pinyinContains("nǐ", "ní", true)).toBe(true); // 2 accepted for 3
     expect(pinyinContains("nǐ", "ní", false)).toBe(false); // exact: 2 ≠ 3
@@ -311,6 +316,40 @@ describe("answerContains (lenient writing match)", () => {
 
   it("a wrong character fails", () => {
     expect(answerContains("图书馆", "图书店")).toBe(false);
+  });
+});
+
+describe("punctuation is stripped from both sides", () => {
+  it("ignores the '<>' emphasis markers cards carry", () => {
+    expect(answerContains("你<好>", "你好")).toBe(true);
+    expect(answerContains("你好", "你<好>")).toBe(true);
+    expect(pinyinContains("nǐ <hǎo>", "nǐhǎo", false)).toBe(true);
+  });
+
+  it("ignores punctuation in meanings", () => {
+    expect(answerContains("to eat, to have (a meal)", "to eat to have a meal")).toBe(true);
+    expect(answerContains("it's fine", "its fine")).toBe(true);
+    expect(answerContains("and/or", "and or")).toBe(true);
+  });
+
+  it("ignores pinyin syllable separators", () => {
+    expect(pinyinContains("xī'ān", "xīān", false)).toBe(true);
+    expect(pinyinContains("nǐ hǎo", "nǐhǎo", false)).toBe(true);
+  });
+
+  it("a punctuation-only guess never matches", () => {
+    expect(answerContains("图书馆", "，。")).toBe(false);
+    expect(answerContains("it's fine", "'''")).toBe(false);
+  });
+
+  it("still rejects a genuinely wrong answer", () => {
+    expect(answerContains("to eat, to have (a meal)", "to drink")).toBe(false);
+  });
+
+  it("minLen counts meaningful characters only", () => {
+    expect(answerContains("你<好>吗", "你好", 2)).toBe(true); // brackets don't pad the guess
+    expect(answerContains("你<好>吗", "你", 2)).toBe(false);
+    expect(answerContains("你<好>吗", "你好吗", Infinity)).toBe(true); // exact ignores markers
   });
 });
 

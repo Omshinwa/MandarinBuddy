@@ -50,9 +50,6 @@ export function WordsScreen() {
   const [search, setSearch] = useState("");
   const [bucketFilter, setBucketFilter] = useState<number | null>(null);
   const [leechOnly, setLeechOnly] = useState(false);
-  // No chip at all is the landing state — that's when the distribution graph
-  // shows. "all" is an explicit chip you pick to get the full list back.
-  const [showAll, setShowAll] = useState(false);
   const [sheet, setSheet] = useState<{ mode: "add" } | { mode: "edit"; word: Word } | null>(null);
 
   const load = useCallback(() => {
@@ -79,9 +76,10 @@ export function WordsScreen() {
 
   const leechCount = useMemo(() => words.filter(isLeech).length, [words]);
 
-  // Nothing asked for yet: no search, no chip. Listing every word you own would
-  // just be a wall of rows nobody scrolls, so show the interval distribution.
-  const showStats = !search.trim() && !showAll && bucketFilter === null && !leechOnly;
+  // "all" is the resting chip — one is always lit. There the distribution graph
+  // sits on top of the list and scrolls away as you go down. Narrow the view
+  // (chip or search) and it makes no sense any more, so it's gone.
+  const showStats = !search.trim() && bucketFilter === null && !leechOnly;
 
   // If the last leech gets reactivated while its filter is on, drop back to "all"
   // so you're not left staring at an empty list with a vanished chip.
@@ -109,9 +107,8 @@ export function WordsScreen() {
         <Chip
           label="all"
           color={t.card}
-          active={showAll}
+          active={bucketFilter === null && !leechOnly}
           onPress={() => {
-            setShowAll((v) => !v);
             setBucketFilter(null);
             setLeechOnly(false);
           }}
@@ -125,7 +122,6 @@ export function WordsScreen() {
             onPress={() => {
               setLeechOnly((v) => !v);
               setBucketFilter(null);
-              setShowAll(false);
             }}
             t={t}
           />
@@ -138,7 +134,6 @@ export function WordsScreen() {
             active={bucketFilter === i && !leechOnly}
             onPress={() => {
               setLeechOnly(false);
-              setShowAll(false);
               setBucketFilter(bucketFilter === i ? null : i);
             }}
             t={t}
@@ -146,45 +141,36 @@ export function WordsScreen() {
         ))}
       </ScrollView>
 
-      {showStats ? (
-        <WordStats
-          words={words}
-          now={now}
-          onPickBucket={(i) => setBucketFilter(i)}
-          onPickLeeches={() => setLeechOnly(true)}
-          t={t}
-        />
-      ) : (
-        <FlatList
-          data={filtered}
-          keyExtractor={(w) => w._id}
-          contentContainerStyle={{ paddingBottom: 30 }}
-          keyboardShouldPersistTaps="handled"
-          keyboardDismissMode="on-drag"
-          renderItem={({ item }) => {
-            const { text, due } = dueLabel(item, now);
-            return (
-              <Pressable
-                style={[styles.row, { backgroundColor: t.card, borderBottomColor: t.border }]}
-                onPress={() => setSheet({ mode: "edit", word: item })}
-              >
-                <View style={[styles.dot, { backgroundColor: BUCKETS[intervalBucket(item.srs.intervalDays)].color }]} />
-                <View style={{ flex: 1 }}>
-                  <Text style={{ fontSize: 22, color: t.text }}>
-                    {item.chinese}
-                    {item.learn_writing ? " ✍️" : ""}
-                    {isLeech(item) ? " 🐢" : ""}
-                  </Text>
-                  <Text style={{ color: t.subtext }} numberOfLines={1}>
-                    {item.pinyin} — {item.def_english}
-                  </Text>
-                </View>
-                <Text style={{ color: due ? t.danger : t.subtext, fontSize: 13 }}>{text}</Text>
-              </Pressable>
-            );
-          }}
-        />
-      )}
+      <FlatList
+        data={filtered}
+        keyExtractor={(w) => w._id}
+        contentContainerStyle={{ paddingBottom: 30 }}
+        keyboardShouldPersistTaps="handled"
+        keyboardDismissMode="on-drag"
+        ListHeaderComponent={showStats ? <WordStats words={words} now={now} t={t} /> : null}
+        renderItem={({ item }) => {
+          const { text, due } = dueLabel(item, now);
+          return (
+            <Pressable
+              style={[styles.row, { backgroundColor: t.card, borderBottomColor: t.border }]}
+              onPress={() => setSheet({ mode: "edit", word: item })}
+            >
+              <View style={[styles.dot, { backgroundColor: BUCKETS[intervalBucket(item.srs.intervalDays)].color }]} />
+              <View style={{ flex: 1 }}>
+                <Text style={{ fontSize: 22, color: t.text }}>
+                  {item.chinese}
+                  {item.learn_writing ? " ✍️" : ""}
+                  {isLeech(item) ? " 🐢" : ""}
+                </Text>
+                <Text style={{ color: t.subtext }} numberOfLines={1}>
+                  {item.pinyin} — {item.def_english}
+                </Text>
+              </View>
+              <Text style={{ color: due ? t.danger : t.subtext, fontSize: 13 }}>{text}</Text>
+            </Pressable>
+          );
+        }}
+      />
 
       {sheet && (
         <WordSheet
@@ -201,21 +187,10 @@ export function WordsScreen() {
   );
 }
 
-// The "all words, no search" view: how the collection is spread across the
-// interval buckets. Every row is a shortcut into that bucket's filtered list.
-function WordStats({
-  words,
-  now,
-  onPickBucket,
-  onPickLeeches,
-  t,
-}: {
-  words: Word[];
-  now: Date;
-  onPickBucket: (bucket: number) => void;
-  onPickLeeches: () => void;
-  t: Theme;
-}) {
+// Header of the "all" list: how the collection is spread across the interval
+// buckets. Read-only — the chips above already filter, so bars that also
+// filtered were the same control twice.
+function WordStats({ words, now, t }: { words: Word[]; now: Date; t: Theme }) {
   const counts = BUCKETS.map(() => 0);
   let dueCount = 0;
   let leechCount = 0;
@@ -242,7 +217,7 @@ function WordStats({
   }
 
   return (
-    <ScrollView contentContainerStyle={styles.stats} keyboardShouldPersistTaps="handled">
+    <View style={styles.stats}>
       <Text style={{ color: t.text, fontSize: 15 }}>
         <Text style={{ fontWeight: "700" }}>{words.length}</Text> words ·{" "}
         <Text style={{ color: dueCount > 0 ? t.danger : t.subtext }}>{dueCount} due</Text> ·{" "}
@@ -260,32 +235,13 @@ function WordStats({
 
       <View style={{ gap: 6 }}>
         {BUCKETS.map((b, i) => (
-          <StatRow
-            key={i}
-            label={b.label}
-            color={b.color}
-            count={counts[i]}
-            fraction={counts[i] / max}
-            onPress={() => onPickBucket(i)}
-            t={t}
-          />
+          <StatRow key={i} label={b.label} color={b.color} count={counts[i]} fraction={counts[i] / max} t={t} />
         ))}
         {leechCount > 0 && (
-          <StatRow
-            label="🐢 leech"
-            color="#ffe0e0"
-            count={leechCount}
-            fraction={leechCount / max}
-            onPress={onPickLeeches}
-            t={t}
-          />
+          <StatRow label="🐢 leech" color="#ffe0e0" count={leechCount} fraction={leechCount / max} t={t} />
         )}
       </View>
-
-      <Text style={{ color: t.subtext, fontSize: 12 }}>
-        Tap a bar to list those words, or search above.
-      </Text>
-    </ScrollView>
+    </View>
   );
 }
 
@@ -294,18 +250,16 @@ function StatRow({
   color,
   count,
   fraction,
-  onPress,
   t,
 }: {
   label: string;
   color: string;
   count: number;
   fraction: number;
-  onPress: () => void;
   t: Theme;
 }) {
   return (
-    <Pressable style={styles.statRow} onPress={onPress} disabled={count === 0}>
+    <View style={styles.statRow}>
       <Text style={[styles.statLabel, { color: t.subtext }]} numberOfLines={1}>
         {label}
       </Text>
@@ -315,7 +269,7 @@ function StatRow({
         )}
       </View>
       <Text style={[styles.statCount, { color: count > 0 ? t.text : t.subtext }]}>{count}</Text>
-    </Pressable>
+    </View>
   );
 }
 
