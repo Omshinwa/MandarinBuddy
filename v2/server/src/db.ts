@@ -15,7 +15,6 @@ export interface WordDoc {
   def_english?: string;
   comments?: string;
   learn_writing?: boolean;
-  level_id?: number; // legacy — read once by the migration, never again
   srs?: Srs; // one schedule per card; the asked question type comes from `facets`
   facets?: Record<Direction, Facet>;
   convCreditDate?: string;

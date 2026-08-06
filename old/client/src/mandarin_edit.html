@@ -207,6 +207,11 @@
         success: function () {
           addcolor();
         },
+        // The server refuses to save now (levels are derived from SRS intervals,
+        // so this page is a viewer). Say so instead of failing silently.
+        error: function (xhr) {
+          alert(xhr.responseText || "Save failed");
+        },
       });
     }
   }
