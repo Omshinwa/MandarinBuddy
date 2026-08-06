@@ -17,6 +17,7 @@ import { answerVerdict, pinyinVerdict, type MatchVerdict } from "../../../shared
 import { applyGrade, isScaffolded } from "../../../shared/src/srs";
 import { DIRECTIONS } from "../../../shared/src/types";
 import type { Direction, Grade, ReviewItem, Srs, Word } from "../../../shared/src/types";
+import { TextStyling } from "../components/TextStyling";
 import { MilestoneOverlay } from "../components/MilestoneOverlay";
 import { SpeakButton, speak } from "../components/SpeakButton";
 import { api } from "../lib/api";
@@ -415,16 +416,22 @@ function AnswerBlock({ word, direction, t }: { word: Word; direction: Direction;
     <>
       {direction === "writing" && (
         <View style={{ flexDirection: "row", alignItems: "center", gap: 10 }}>
-          <Text style={{ fontSize: 44, color: t.text }}>{word.chinese}</Text>
+          <TextStyling text={word.chinese} style={{ fontSize: 44, color: t.text }} />
           <SpeakButton text={word.chinese} size={20} />
         </View>
       )}
-      <Text style={[styles.pinyinAnswer, { color: t.subtext }]}>{word.pinyin}</Text>
+      <TextStyling text={word.pinyin} style={[styles.pinyinAnswer, { color: t.subtext }]} />
       {direction !== "writing" && (
-        <Text style={{ fontSize: 26, color: t.text, textAlign: "center" }}>{word.def_english}</Text>
+        <TextStyling
+          text={word.def_english}
+          style={{ fontSize: 26, color: t.text, textAlign: "center" }}
+        />
       )}
       {!!word.comments && (
-        <Text style={{ fontSize: 17, color: t.subtext, textAlign: "center" }}>{word.comments}</Text>
+        <TextStyling
+          text={word.comments}
+          style={{ fontSize: 17, color: t.subtext, textAlign: "center" }}
+        />
       )}
     </>
   );
@@ -464,16 +471,20 @@ function PromptBlock({
   return (
     <>
       {!answered && !!view.promptTop && (
-        <Text style={[styles.pinyinAbove, { color: t.subtext }]}>{view.promptTop}</Text>
+        <TextStyling text={view.promptTop} style={[styles.pinyinAbove, { color: t.subtext }]} />
       )}
       <View style={{ flexDirection: "row", alignItems: "center", gap: 14 }}>
-        <Text style={{ fontSize: view.questionSize, color: t.text, textAlign: "center" }}>
-          {view.question}
-        </Text>
+        <TextStyling
+          text={view.question}
+          style={{ fontSize: view.questionSize, color: t.text, textAlign: "center" }}
+        />
         {showSpeaker && <SpeakButton text={speakText} size={26} />}
       </View>
       {!answered && !!view.promptSub && (
-        <Text style={{ fontSize: 17, color: t.subtext, textAlign: "center" }}>{view.promptSub}</Text>
+        <TextStyling
+          text={view.promptSub}
+          style={{ fontSize: 17, color: t.subtext, textAlign: "center" }}
+        />
       )}
       {!answered && !!view.promptNote && (
         <Text style={{ color: t.subtext, fontSize: 13 }}>{view.promptNote}</Text>
@@ -713,7 +724,7 @@ function InputCard({
       {!!view.hint &&
         !outcome &&
         (showHint ? (
-          <Text style={{ color: t.subtext, textAlign: "center" }}>{view.hint}</Text>
+          <TextStyling text={view.hint} style={{ color: t.subtext, textAlign: "center" }} />
         ) : (
           <Pressable onPress={() => setShowHint(true)}>
             <Text style={{ color: t.tint }}>show hint</Text>

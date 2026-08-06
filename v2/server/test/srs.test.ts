@@ -4,6 +4,7 @@ import {
   answerVerdict,
   pinyinContains,
   pinyinVerdict,
+  stripNoise,
 } from "../../shared/src/pinyin";
 import {
   TUNING,
@@ -321,6 +322,18 @@ describe("answerContains (lenient writing match)", () => {
 
   it("a wrong character fails", () => {
     expect(answerContains("图书馆", "图书店")).toBe(false);
+  });
+});
+
+describe("stripNoise (shared by answer matching and the word search)", () => {
+  it("drops case, spaces, punctuation and the emphasis markers", () => {
+    expect(stripNoise("图<书>馆")).toBe("图书馆");
+    expect(stripNoise("话*题*")).toBe("话题");
+    expect(stripNoise("To Eat, to have (a meal)")).toBe("toeattohaveameal");
+  });
+
+  it("keeps tone marks — folding those is the search's own business", () => {
+    expect(stripNoise("nǐ hǎo")).toBe("nǐhǎo");
   });
 });
 

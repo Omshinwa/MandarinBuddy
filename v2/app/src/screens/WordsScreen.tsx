@@ -15,8 +15,10 @@ import {
   View,
 } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
+import { stripNoise } from "../../../shared/src/pinyin";
 import { BUCKETS, intervalBucket, isSuspended } from "../../../shared/src/srs";
 import { DIRECTIONS } from "../../../shared/src/types";
+import { TextStyling } from "../components/TextStyling";
 import type { Word, WordInput } from "../../../shared/src/types";
 import { ApiError, api } from "../lib/api";
 import { confirm } from "../lib/confirm";
@@ -24,10 +26,13 @@ import { useTheme, type Theme } from "../theme";
 
 const DAY_MS = 24 * 60 * 60 * 1000;
 
-// Strip tone marks / accents so a search for "ai" matches pinyin like "ài".
-// NFD splits an accented letter into base + combining marks, then we drop the marks.
+// Fold both sides of the search the way a typed review answer is folded: case,
+// spaces, punctuation and the <> / * emphasis markers all drop out, so "图书馆"
+// finds 图<书>馆 and "to eat to have" finds "to eat, to have (a meal)". Tone
+// marks come off first (NFD splits an accented letter into base + combining
+// marks) — that part is search-only, so "ai" still matches "ài".
 function fold(s: string): string {
-  return s.toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "");
+  return stripNoise(s.normalize("NFD").replace(/[\u0300-\u036f]/g, ""));
 }
 
 // A word is a leech when its card got suspended after too many lapses.
@@ -66,7 +71,7 @@ export function WordsScreen() {
       if (bucketFilter !== null && intervalBucket(w.srs.intervalDays) !== bucketFilter) return false;
       if (!q) return true;
       return (
-        w.chinese.includes(q) ||
+        fold(w.chinese).includes(q) ||
         fold(w.pinyin).includes(q) ||
         fold(w.def_english).includes(q)
         // || fold(w.comments).includes(q)
@@ -175,13 +180,15 @@ export function WordsScreen() {
               <View style={[styles.dot, { backgroundColor: BUCKETS[intervalBucket(item.srs.intervalDays)].color }]} />
               <View style={{ flex: 1 }}>
                 <Text style={{ fontSize: 22, color: t.text }}>
-                  {item.chinese}
+                  <TextStyling text={item.chinese} />
                   {item.learn_writing ? " ✍️" : ""}
                   {isLeech(item) ? " 🐢" : ""}
                 </Text>
-                <Text style={{ color: t.subtext }} numberOfLines={1}>
-                  {item.pinyin} — {item.def_english}
-                </Text>
+                <TextStyling
+                  text={`${item.pinyin} — ${item.def_english}`}
+                  style={{ color: t.subtext }}
+                  numberOfLines={1}
+                />
               </View>
               <Text style={{ color: due ? t.danger : t.subtext, fontSize: 13 }}>{text}</Text>
             </Pressable>

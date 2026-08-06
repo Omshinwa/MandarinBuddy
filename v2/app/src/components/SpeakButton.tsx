@@ -4,6 +4,7 @@ import React from "react";
 import { Alert, Platform, Pressable, Text } from "react-native";
 import { API_BASE } from "../lib/api";
 import { isAutoSpeakOn } from "../lib/settings";
+import { stripEmphasis } from "./TextStyling";
 
 // Same voice as the old site: Google Translate's Mandarin TTS (the pleasant
 // female voice), proxied through our server because browsers block direct
@@ -48,10 +49,10 @@ const EMOJI_RE =
 // calls without it, so muting silences all of it in one place.
 export function speak(text: string, opts?: { force?: boolean }) {
   if (!opts?.force && !isAutoSpeakOn()) return;
-  // '<' and '>' mark emphasis on cards — strip them so TTS doesn't read the
-  // brackets aloud (matches the old site's behavior).
-  const clean = text
-    .replace(/[<>]/g, "")
+  // Cards mark emphasis with <> or * — drop the markers so TTS doesn't read them
+  // aloud (matches the old site's behavior).
+  const clean = stripEmphasis(text)
+    .replace(/[<>*]/g, "") // unclosed markers stripEmphasis left in place
     .replace(EMOJI_RE, "")
     .replace(/\s+/g, " ")
     .trim();
