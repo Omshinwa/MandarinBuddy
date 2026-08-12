@@ -1,11 +1,20 @@
 import React, { useMemo, useState } from "react";
 import { Text, type TextStyle } from "react-native";
+import { emphasizedPart, stripEmphasis } from "../../../shared/src/text";
 import type { Word } from "../../../shared/src/types";
 import { useTheme } from "../theme";
 
 interface Segment {
   text: string;
   word?: Word;
+}
+
+// A dictionary word as it appears in running text. A marked card is only its
+// marked run — 话<题> is looked for, and highlighted, as 题 — and an unmarked one
+// is the whole word. Either way the markers themselves never reach the screen.
+interface Entry {
+  plain: string;
+  word: Word;
 }
 
 interface Emphasis {
@@ -53,20 +62,20 @@ function parseInline(text: string): Emphasis[] {
 }
 
 // Split text into plain runs and dictionary-word runs (longest match wins).
-function segmentText(text: string, byFirstChar: Map<string, Word[]>): Segment[] {
+function segmentText(text: string, byFirstChar: Map<string, Entry[]>): Segment[] {
   const segments: Segment[] = [];
   let plain = "";
   let i = 0;
   while (i < text.length) {
     const candidates = byFirstChar.get(text[i]);
-    const match = candidates?.find((w) => text.startsWith(w.chinese, i));
+    const match = candidates?.find((e) => text.startsWith(e.plain, i));
     if (match) {
       if (plain) {
         segments.push({ text: plain });
         plain = "";
       }
-      segments.push({ text: match.chinese, word: match });
-      i += match.chinese.length;
+      segments.push({ text: match.plain, word: match.word });
+      i += match.plain.length;
     } else {
       plain += text[i];
       i += 1;
@@ -93,14 +102,15 @@ export function GlossedText({ text, words, onReveal, fontSize = 20, onLongPress 
   const [revealed, setRevealed] = useState<Set<string>>(new Set());
 
   const byFirstChar = useMemo(() => {
-    const map = new Map<string, Word[]>();
-    for (const w of words) {
-      if (!w.chinese) continue;
-      const list = map.get(w.chinese[0]) ?? [];
-      list.push(w);
-      map.set(w.chinese[0], list);
+    const map = new Map<string, Entry[]>();
+    for (const word of words) {
+      const plain = emphasizedPart(word.chinese);
+      if (!plain) continue;
+      const list = map.get(plain[0]) ?? [];
+      list.push({ plain, word });
+      map.set(plain[0], list);
     }
-    for (const list of map.values()) list.sort((a, b) => b.chinese.length - a.chinese.length);
+    for (const list of map.values()) list.sort((a, b) => b.plain.length - a.plain.length);
     return map;
   }, [words]);
 
@@ -156,7 +166,10 @@ export function GlossedText({ text, words, onReveal, fontSize = 20, onLongPress 
                     fontStyle: "normal",
                   }}
                 >
-                  {` (${word.pinyin} — ${word.def_english})`}
+                  {/* Pinyin follows the same rule as the character, so a card
+                      written 话<题> / huà<tí> glosses 题 as "tí" — mark neither
+                      or both, or the reading won't line up with what's shown. */}
+                  {` (${emphasizedPart(word.pinyin)} — ${stripEmphasis(word.def_english)})`}
                 </Text>
               )}
             </Text>

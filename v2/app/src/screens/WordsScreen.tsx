@@ -18,6 +18,7 @@ import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { stripNoise } from "../../../shared/src/pinyin";
 import { BUCKETS, intervalBucket, isSuspended } from "../../../shared/src/srs";
 import { DIRECTIONS } from "../../../shared/src/types";
+import { OutlineButton, PrimaryButton } from "../components/Button";
 import { TextStyling } from "../components/TextStyling";
 import type { Word, WordInput } from "../../../shared/src/types";
 import { ApiError, api } from "../lib/api";
@@ -366,26 +367,24 @@ function WordSheet({ word, onClose, t }: { word: Word | null; onClose: (changed:
 
             {error && <Text style={{ color: t.danger }}>{error}</Text>}
 
-            <Pressable
-              style={[styles.primary, { backgroundColor: t.tint, opacity: chinese.trim() && pinyin.trim() && english.trim() ? 1 : 0.4 }]}
+            <PrimaryButton
+              label="Save"
               onPress={save}
               disabled={!chinese.trim() || !pinyin.trim() || !english.trim()}
-            >
-              <Text style={{ color: "#fff", fontWeight: "700" }}>Save</Text>
-            </Pressable>
+            />
             {word && isLeech(word) && (
-              <Pressable style={[styles.secondary, { borderColor: t.tint }]} onPress={reactivate}>
-                <Text style={{ color: t.tint }}>🐢 Reactivate leech</Text>
-              </Pressable>
+              <OutlineButton label="🐢 Reactivate leech" onPress={reactivate} />
             )}
             {word && (
               <View style={{ flexDirection: "row", gap: 10 }}>
-                <Pressable style={[styles.secondary, { borderColor: t.border }]} onPress={resetProgress}>
-                  <Text style={{ color: t.subtext }}>Reset progress</Text>
-                </Pressable>
-                <Pressable style={[styles.secondary, { borderColor: t.danger }]} onPress={remove}>
-                  <Text style={{ color: t.danger }}>Delete</Text>
-                </Pressable>
+                <OutlineButton
+                  label="Reset progress"
+                  onPress={resetProgress}
+                  color={t.subtext}
+                  borderColor={t.border}
+                  style={{ flex: 1 }}
+                />
+                <OutlineButton label="Delete" onPress={remove} color={t.danger} style={{ flex: 1 }} />
               </View>
             )}
             <Pressable style={{ alignItems: "center", padding: 8 }} onPress={() => onClose(false)}>
@@ -433,6 +432,4 @@ const styles = StyleSheet.create({
   sheet: { borderTopLeftRadius: 20, borderTopRightRadius: 20, maxHeight: "88%" },
   input: { borderRadius: 10, paddingHorizontal: 12, paddingVertical: 10, fontSize: 16 },
   switchRow: { flexDirection: "row", justifyContent: "space-between", alignItems: "center" },
-  primary: { borderRadius: 12, paddingVertical: 13, alignItems: "center" },
-  secondary: { flex: 1, borderRadius: 12, paddingVertical: 11, alignItems: "center", borderWidth: 1 },
 });

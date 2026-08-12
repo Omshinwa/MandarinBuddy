@@ -1,7 +1,9 @@
 import { Pressable, ScrollView, StyleSheet, Switch, Text, View } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
-import { DIRECTIONS, type Direction } from "../../../shared/src/types";
+import { DIRECTIONS } from "../../../shared/src/types";
+import { OutlineButton } from "../components/Button";
 import { confirm } from "../lib/confirm";
+import { DIRECTION_LABEL } from "../lib/labels";
 import {
   DEFAULT_BOTH_TRANSITION_DAYS,
   DEFAULT_FUZZY_PINYIN,
@@ -30,12 +32,6 @@ import { useTheme, type Theme } from "../theme";
 // Global app settings. Opened from the Words tab (the gear next to +) rather
 // than a tab of its own, since it's touched far less than the three main screens.
 // Every knob here is persisted via the hooks in lib/settings.
-
-const DIRECTION_LABEL: Record<Direction, string> = {
-  meaning: "🧠 Meaning",
-  reading: "🗣️ Reading",
-  writing: "✍️ Writing",
-};
 
 const THEME_LABEL: Record<ThemePref, string> = {
   system: "🌗 System",
@@ -225,9 +221,12 @@ export function SettingsScreen({ onClose }: { onClose?: () => void }) {
         </View>
       </Section>
 
-      <Pressable onPress={resetToDefaults} style={s.resetButton}>
-        <Text style={s.resetText}>Reset to default</Text>
-      </Pressable>
+      <OutlineButton
+        label="Reset to default"
+        onPress={resetToDefaults}
+        color={t.danger}
+        style={{ alignSelf: "center", marginTop: 4, paddingHorizontal: 22 }}
+      />
     </ScrollView>
   );
 }
@@ -334,7 +333,17 @@ function SwitchRow({
   );
 }
 
-const styles = (t: Theme) =>
+// Every themed component here asks for the sheet on each render — Section, Chip,
+// Segmented, SwitchRow, and the screen itself — so build it once per theme
+// instead of once per call. There are only ever two Theme objects to key on.
+const sheets = new WeakMap<Theme, ReturnType<typeof createStyles>>();
+function styles(t: Theme) {
+  let sheet = sheets.get(t);
+  if (!sheet) sheets.set(t, (sheet = createStyles(t)));
+  return sheet;
+}
+
+const createStyles = (t: Theme) =>
   StyleSheet.create({
     screen: { flex: 1, backgroundColor: t.bg },
     content: { padding: 20, gap: 24, paddingBottom: 48 },
@@ -366,14 +375,4 @@ const styles = (t: Theme) =>
       alignSelf: "stretch",
     },
     segment: { flex: 1, paddingVertical: 8, borderRadius: 8, alignItems: "center" },
-    resetButton: {
-      alignSelf: "center",
-      marginTop: 4,
-      paddingVertical: 12,
-      paddingHorizontal: 22,
-      borderRadius: 12,
-      borderWidth: 1.5,
-      borderColor: t.danger,
-    },
-    resetText: { color: t.danger, fontWeight: "700", fontSize: 15 },
   });

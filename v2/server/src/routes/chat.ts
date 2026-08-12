@@ -5,6 +5,7 @@ import { Hono } from "hono";
 import { streamSSE } from "hono/streaming";
 import OpenAI from "openai";
 import { applyGrade } from "../../../shared/src/srs";
+import { DEFAULT_USER_LANGUAGE } from "../../../shared/src/types";
 import type { ChatEvent, ChatMode, FlashcardProposal } from "../../../shared/src/types";
 import { type ChatDoc, chats, words } from "../db";
 import {
@@ -35,6 +36,11 @@ const TOOLS: OpenAI.Chat.Completions.ChatCompletionTool[] = [
   type: "function",
   function: { name: tool.name, description: tool.description, parameters: tool.input_schema },
 }));
+
+// The tool result for a card that made it onto the user's screen. Sent live when
+// the card is proposed, and replayed with the stored turn (see replayHistoryDoc),
+// so both paths have to say the same thing.
+const CARD_SHOWN_RESULT = "card shown to the user with a one-tap Add button";
 
 function parseMode(value: string | undefined): ChatMode | null {
   return value === "assistant" || value === "conversation" ? value : null;
@@ -171,7 +177,7 @@ function replayHistoryDoc(d: ChatDoc): OpenAI.Chat.Completions.ChatCompletionMes
     ...calls.map((c): OpenAI.Chat.Completions.ChatCompletionMessageParam => ({
       role: "tool",
       tool_call_id: c.id,
-      content: "card shown to the user with a one-tap Add button",
+      content: CARD_SHOWN_RESULT,
     })),
   ];
 }
@@ -191,12 +197,12 @@ chatRoute.post("/", async (c) => {
   const message = body.message?.trim();
   const kickoff = body.kickoff === true;
   const reviewing = body.reviewing === true || kickoff; // starting a review implies review mode
-  // The user's explanation-fallback language (from Settings); default keeps the
-  // prior bilingual behaviour if the client sends nothing.
+  // The user's explanation-fallback language (from Settings); the shared default
+  // covers a client that sends nothing.
   const userLanguage =
     typeof body.userLanguage === "string" && body.userLanguage.trim()
       ? body.userLanguage.trim()
-      : "English & French";
+      : DEFAULT_USER_LANGUAGE;
   if (!mode || (!message && !kickoff)) return c.json({ error: "mode and message required" }, 400);
 
   if (!process.env.DEEPSEEK_API_KEY) {
@@ -312,7 +318,7 @@ chatRoute.post("/", async (c) => {
               } else {
                 await send({ type: "flashcard", card });
                 proposedCards.push(card);
-                result = "card shown to the user with a one-tap Add button";
+                result = CARD_SHOWN_RESULT;
               }
             }
           } else if (tc.name === "lookup_card") {

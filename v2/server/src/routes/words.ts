@@ -6,30 +6,12 @@ import { serializeWord, words } from "../db";
 
 export const wordsRoute = new Hono();
 
-// Strip tone marks / accents so a search for "ai" matches pinyin like "ài".
-// NFD splits an accented letter into base + combining marks, then we drop the marks.
-function fold(s: string): string {
-  return s.toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "");
-}
-
-// GET /api/words?search=&due=true
+// GET /api/words — the whole deck, newest first. Searching and due-filtering are
+// the client's job: both screens hold the full list in memory already, and the
+// words list folds the query the same way a typed review answer is folded.
 wordsRoute.get("/", async (c) => {
-  const search = fold(c.req.query("search")?.trim() ?? "");
-  const dueOnly = c.req.query("due") === "true";
-  const nowIso = new Date().toISOString();
-
   const all = await words.find({ srs: { $exists: true } }).sort({ createdAt: -1 }).toArray();
-  const filtered = all.filter((w) => {
-    if (dueOnly && w.srs!.due > nowIso) return false;
-    if (!search) return true;
-    return (
-      w.chinese.includes(search) ||
-      fold(w.pinyin ?? "").includes(search) ||
-      fold(w.def_english ?? "").includes(search) ||
-      fold(w.comments ?? "").includes(search)
-    );
-  });
-  return c.json(filtered.map(serializeWord));
+  return c.json(all.map(serializeWord));
 });
 
 function validateInput(body: Partial<WordInput>): string | null {

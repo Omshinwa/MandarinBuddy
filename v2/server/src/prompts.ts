@@ -1,3 +1,4 @@
+import { stripEmphasis } from "../../shared/src/text";
 import type { WordDoc } from "./db";
 
 export const PROPOSE_FLASHCARD_TOOL = {
@@ -112,8 +113,12 @@ function isWeak(w: WordDoc, nowIso: string): boolean {
 // English gloss so the model stays grounded on the user's intended sense.
 export function buildVocabBlock(all: WordDoc[], now: Date): string {
   const nowIso = now.toISOString();
+  // Emphasis markers are an authoring note on the card, not part of the word —
+  // send the plain form so the model never echoes 话<题> back into the chat.
   const line = (w: WordDoc) =>
-    `${w.chinese} — ${w.def_english}${isWeak(w, nowIso) ? " [weak]" : ""}`;
+    `${stripEmphasis(w.chinese)} — ${stripEmphasis(w.def_english ?? "")}${
+      isWeak(w, nowIso) ? " [weak]" : ""
+    }`;
 
   // Most-overdue weak words first so truncation keeps the ones that matter.
   const weak = all

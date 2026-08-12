@@ -58,8 +58,8 @@ async function request<T>(path: string, init?: RequestInit): Promise<T> {
 }
 
 export const api = {
-  listWords: (search?: string) =>
-    request<Word[]>(`/api/words${search ? `?search=${encodeURIComponent(search)}` : ""}`),
+  // The whole deck; both callers filter it client-side.
+  listWords: () => request<Word[]>("/api/words"),
   createWord: (input: WordInput) =>
     request<Word>("/api/words", { method: "POST", body: JSON.stringify(input) }),
   updateWord: (

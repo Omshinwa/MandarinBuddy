@@ -2,9 +2,9 @@ import { createAudioPlayer, setAudioModeAsync, type AudioPlayer } from "expo-aud
 import * as Speech from "expo-speech";
 import React from "react";
 import { Alert, Platform, Pressable, Text } from "react-native";
+import { stripEmphasis } from "../../../shared/src/text";
 import { API_BASE } from "../lib/api";
 import { isAutoSpeakOn } from "../lib/settings";
-import { stripEmphasis } from "./TextStyling";
 
 // Same voice as the old site: Google Translate's Mandarin TTS (the pleasant
 // female voice), proxied through our server because browsers block direct

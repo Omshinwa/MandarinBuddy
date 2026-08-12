@@ -69,7 +69,20 @@ function ConfettiPiece({ i, tier }: { i: number; tier: Tier }) {
 }
 
 // Full-screen celebration shown in place of the next card at each milestone.
-export function MilestoneOverlay({ count, onContinue, t }: { count: number; onContinue: () => void; t: Theme }) {
+// `changingTo` is the badge of the question type the next card switches to, when
+// that switch is why this went up — without it the party is ambiguous, since
+// finishing a run of `reviewBatch` cards looks exactly the same.
+export function MilestoneOverlay({
+  count,
+  changingTo,
+  onContinue,
+  t,
+}: {
+  count: number;
+  changingTo?: string | null;
+  onContinue: () => void;
+  t: Theme;
+}) {
   const tier = tierOf(count);
   const cfg = TIER[tier];
   const hue = useRef(new Animated.Value(0)).current; // party background cycle (color → no native driver)
@@ -129,6 +142,9 @@ export function MilestoneOverlay({ count, onContinue, t }: { count: number; onCo
       <Animated.View style={{ transform: [{ scale: pop }], alignItems: "center" }}>
         <Text style={[styles.congrats, tier === "huge" && { fontSize: 42 }]}>Congrats!</Text>
         <Text style={styles.count}>You've reviewed {count} cards!</Text>
+        {!!changingTo && (
+          <Text style={styles.switchNote}>Changing question type to {changingTo}</Text>
+        )}
         <Text style={styles.tierTitle}>{cfg.title}</Text>
       </Animated.View>
       {/* Decorative affordance only — the whole overlay above is the tap target. */}
@@ -147,6 +163,20 @@ const styles = StyleSheet.create({
   emoji100: { fontSize: 100 },
   congrats: { fontSize: 34, fontWeight: "900", color: "#fff", letterSpacing: 1, ...shadow },
   count: { fontSize: 18, fontWeight: "700", color: "#fff", marginTop: 6, textAlign: "center", paddingHorizontal: 30, ...shadow },
+  // Darkened pill: the reason line has to stay readable over the whole rainbow
+  // cycle behind it. `overflow: hidden` is what clips the background to the radius.
+  switchNote: {
+    fontSize: 17,
+    fontWeight: "800",
+    color: "#fff",
+    marginTop: 14,
+    textAlign: "center",
+    paddingHorizontal: 18,
+    paddingVertical: 10,
+    borderRadius: 20,
+    overflow: "hidden",
+    backgroundColor: "rgba(0,0,0,0.28)",
+  },
   tierTitle: { fontSize: 15, fontWeight: "800", color: "#ffffffdd", marginTop: 8, letterSpacing: 4, textTransform: "uppercase" },
   button: {
     marginTop: 10,

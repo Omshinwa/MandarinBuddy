@@ -51,6 +51,11 @@ export interface ReviewItem {
   direction: Direction;
 }
 
+// The language the AI falls back to when it explains something outside Chinese.
+// Shared because both sides need the same value: the app seeds the setting with
+// it, and the server uses it when a client sends no language at all.
+export const DEFAULT_USER_LANGUAGE = "English";
+
 export type ChatMode = "assistant" | "conversation";
 
 export interface ChatMessage {

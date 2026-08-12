@@ -1,7 +1,7 @@
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import { useSyncExternalStore } from "react";
 import { REVIEW_BATCH } from "../../../shared/src/srs";
-import { DIRECTIONS, type Direction } from "../../../shared/src/types";
+import { DEFAULT_USER_LANGUAGE, DIRECTIONS, type Direction } from "../../../shared/src/types";
 
 // Settings live in a tiny in-memory reactive store, not per-component state.
 // Every hook that reads a setting subscribes to the same store, so a change made
@@ -197,13 +197,9 @@ export function useReviewBatch(): [number, (v: number) => void] {
 }
 
 // The language the user speaks — passed to the chat prompt so the AI falls back
-// to it when glossing a word or explaining something outside Chinese. Default
-// keeps the previously hard-coded bilingual behaviour.
-export const DEFAULT_USER_LANGUAGE = "English & French";
-const userLanguageStore = stringStore("settings.userLanguage", DEFAULT_USER_LANGUAGE);
-export function useUserLanguage(): [string, (v: string) => void] {
-  return [useStore(userLanguageStore), userLanguageStore.set];
-}
+// to it when glossing a word or explaining something outside Chinese. The default
+// is shared with the server, which uses the same value for clients that send none.
+export { DEFAULT_USER_LANGUAGE };
 export const LANGUAGE_OPTIONS = [
   "English",
   "Français",
@@ -211,6 +207,14 @@ export const LANGUAGE_OPTIONS = [
   "Deutsch",
   "日本語",
 ];
+const userLanguageStore = stringStore("settings.userLanguage", DEFAULT_USER_LANGUAGE);
+export function useUserLanguage(): [string, (v: string) => void] {
+  const stored = useStore(userLanguageStore);
+  // A language saved by an older build may no longer be offered (the retired
+  // "English & French"), which would leave no chip selected in Settings and keep
+  // sending the dead value to the prompt — fall back to the default instead.
+  return [LANGUAGE_OPTIONS.includes(stored) ? stored : DEFAULT_USER_LANGUAGE, userLanguageStore.set];
+}
 
 // How each question type is tested in review:
 //  - "flashcard": show the card, reveal the answer, self-grade (trust the user)
