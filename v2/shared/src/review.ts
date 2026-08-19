@@ -12,7 +12,7 @@ export type Grade =
 
 // How hard the question picker leans on the weakest facet. Higher = a weak
 // facet is asked more times before a stronger one gets a turn.
-const FACET_TUNING = {
+export const FACET_TUNING = {
   facetBias: 2,
   strengthCap: 8, // ceiling on a facet's mastery level
 };

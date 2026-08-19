@@ -3,6 +3,7 @@ import {
   applyGrade,
   bumpStrength,
   type Facet,
+  FACET_TUNING,
   FACETS,
   type FacetState,
   isDue,
@@ -182,7 +183,9 @@ describe("bumpStrength", () => {
 
   it("is bounded to [0, strengthCap]", () => {
     expect(bumpStrength(0, "reviewed_forgot")).toBe(0);
-    expect(bumpStrength(TUNING.strengthCap, "reviewed_easy")).toBe(TUNING.strengthCap);
+    expect(bumpStrength(FACET_TUNING.strengthCap, "reviewed_easy")).toBe(
+      FACET_TUNING.strengthCap,
+    );
   });
 });
 
