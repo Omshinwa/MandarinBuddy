@@ -55,7 +55,7 @@ export function AuthGate({ children }: { children: React.ReactNode }) {
       }}
     >
       <Text style={{ fontSize: 22, fontWeight: "600", color: t.text, marginBottom: 4 }}>
-        SuperAnki
+        MandarinBuddy
       </Text>
       <Text style={{ color: t.subtext, marginBottom: 20 }}>Enter the password to continue</Text>
       <TextInput

@@ -1,6 +1,6 @@
 import React, { useState } from "react";
 import { Pressable, StyleSheet, Text, TextInput, View } from "react-native";
-import type { FlashcardProposal } from "../../../shared/src/types";
+import { type FlashcardProposal } from "../../../shared/src";
 import { ApiError, api } from "../lib/api";
 import { useTheme } from "../theme";
 
@@ -19,15 +19,17 @@ export function FlashcardProposalCard({ card, onAdded }: Props) {
   const [chinese, setChinese] = useState(card.chinese);
   const [pinyin, setPinyin] = useState(card.pinyin);
   const [english, setEnglish] = useState(card.english);
-  const [example, setExample] = useState(card.example);
+  const [comments, setComments] = useState(card.comments);
 
   const add = async () => {
     try {
+      // learn_writing is the one WordInput field the model doesn't propose — it's
+      // the user's call, and defaults off.
       await api.createWord({
         chinese,
         pinyin,
-        def_english: english,
-        comments: example,
+        english,
+        comments,
         learn_writing: false,
       });
       setStatus("added");
@@ -65,7 +67,7 @@ export function FlashcardProposalCard({ card, onAdded }: Props) {
           <TextInput style={[inputStyle, styles.big]} value={chinese} onChangeText={setChinese} />
           <TextInput style={inputStyle} value={pinyin} onChangeText={setPinyin} />
           <TextInput style={inputStyle} value={english} onChangeText={setEnglish} />
-          <TextInput style={inputStyle} value={example} onChangeText={setExample} multiline />
+          <TextInput style={inputStyle} value={comments} onChangeText={setComments} multiline />
           <View style={styles.row}>
             <Pressable
               style={[styles.button, { backgroundColor: t.success }]}

@@ -5,7 +5,7 @@ import { SettingsScreen } from "../../screens/SettingsScreen";
 
 // The frame every phase renders inside: the streak-tinted background and a top
 // bar whose right end is the Settings gear. `meta` fills the rest of that bar
-// (the card counter and direction badge, when a card is up). Settings sit here
+// (the card counter and facet badge, when a card is up). Settings sit here
 // because everything in them tunes reviewing — and they stay reachable from the
 // empty and done screens, which is exactly where you'd go to change the batch.
 export function ReviewChrome({

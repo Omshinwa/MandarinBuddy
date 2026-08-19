@@ -2,7 +2,7 @@ import { createAudioPlayer, setAudioModeAsync, type AudioPlayer } from "expo-aud
 import * as Speech from "expo-speech";
 import React from "react";
 import { Alert, Platform, Pressable, Text } from "react-native";
-import { stripEmphasis } from "../../../shared/src/text";
+import { stripEmphasis } from "../../../shared/src";
 import { API_BASE } from "../lib/api";
 import { isAutoSpeakOn } from "../lib/settings";
 

@@ -1,23 +1,23 @@
 import { Hono } from "hono";
 import { ObjectId } from "mongodb";
-import { newFacets, newSrs } from "../../../shared/src/srs";
-import type { WordInput } from "../../../shared/src/types";
+import { newFacets, newSrs, type WordInput } from "../../../shared/src";
 import { serializeWord, words } from "../db";
 
 export const wordsRoute = new Hono();
 
-// GET /api/words — the whole deck, newest first. Searching and due-filtering are
-// the client's job: both screens hold the full list in memory already, and the
-// words list folds the query the same way a typed review answer is folded.
+// GET /api/words
+// return the whole deck, newest first
+// Searching and filtering are the client's job. 
+// both screens hold the full list in memory
 wordsRoute.get("/", async (c) => {
-  const all = await words.find({ srs: { $exists: true } }).sort({ createdAt: -1 }).toArray();
+  const all = await words.find({}).sort({ createdAt: -1 }).toArray();
   return c.json(all.map(serializeWord));
 });
 
 function validateInput(body: Partial<WordInput>): string | null {
   if (!body.chinese?.trim()) return "chinese is required";
   if (!body.pinyin?.trim()) return "pinyin is required";
-  if (!body.def_english?.trim()) return "def_english is required";
+  if (!body.english?.trim()) return "english is required";
   return null;
 }
 
@@ -36,7 +36,7 @@ wordsRoute.post("/", async (c) => {
     _id: new ObjectId(),
     chinese,
     pinyin: body.pinyin!.trim(),
-    def_english: body.def_english!.trim(),
+    english: body.english!.trim(),
     comments: body.comments?.trim() ?? "",
     learn_writing: body.learn_writing ?? false,
     srs: newSrs(now),
@@ -58,7 +58,7 @@ wordsRoute.put("/:id", async (c) => {
   };
 
   const $set: Record<string, unknown> = { updatedAt: new Date() };
-  for (const field of ["chinese", "pinyin", "def_english", "comments"] as const) {
+  for (const field of ["chinese", "pinyin", "english", "comments"] as const) {
     if (typeof body[field] === "string") $set[field] = body[field]!.trim();
   }
   if (typeof body.learn_writing === "boolean") $set.learn_writing = body.learn_writing;

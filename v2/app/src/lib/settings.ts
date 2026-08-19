@@ -1,7 +1,6 @@
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import { useSyncExternalStore } from "react";
-import { REVIEW_BATCH } from "../../../shared/src/srs";
-import { DEFAULT_USER_LANGUAGE, DIRECTIONS, type Direction } from "../../../shared/src/types";
+import { DEFAULT_USER_LANGUAGE, type Facet, FACETS, REVIEW_BATCH } from "../../../shared/src";
 
 // Settings live in a tiny in-memory reactive store, not per-component state.
 // Every hook that reads a setting subscribes to the same store, so a change made
@@ -224,31 +223,31 @@ export function useUserLanguage(): [string, (v: string) => void] {
 //  - "none":      this facet is never tested — cards are never queued for it
 // Defaults: meaning is shown, reading grows into a typed test, writing is typed.
 export type TestMethod = "flashcard" | "both" | "input" | "none";
-export const DEFAULT_TEST_METHODS: Record<Direction, TestMethod> = {
+export const DEFAULT_TEST_METHODS: Record<Facet, TestMethod> = {
   meaning: "flashcard",
   reading: "both",
   writing: "input",
 };
 
-const methodKey = (d: Direction) => `settings.testMethod.${d}`;
+const methodKey = (d: Facet) => `settings.testMethod.${d}`;
 const isMethod = (v: unknown): v is TestMethod =>
   v === "flashcard" || v === "input" || v === "both" || v === "none";
 
-// The three facets' methods share one reactive object. Per-direction storage
+// The three facets' methods share one reactive object. Per-facet storage
 // keys are kept for backward compatibility, but reads/writes go through the
 // store so the review screen and the settings screen stay in lock-step.
 function createMethodsStore() {
-  let value: Record<Direction, TestMethod> = { ...DEFAULT_TEST_METHODS };
+  let value: Record<Facet, TestMethod> = { ...DEFAULT_TEST_METHODS };
   let hydrated = false;
   const listeners = new Set<Listener>();
   const emit = () => listeners.forEach((l) => l());
   const hydrate = () => {
     if (hydrated) return;
     hydrated = true;
-    Promise.all(DIRECTIONS.map((d) => AsyncStorage.getItem(methodKey(d)))).then((vals) => {
+    Promise.all(FACETS.map((d) => AsyncStorage.getItem(methodKey(d)))).then((vals) => {
       const next = { ...value };
       let changed = false;
-      DIRECTIONS.forEach((d, i) => {
+      FACETS.forEach((d, i) => {
         if (isMethod(vals[i])) {
           next[d] = vals[i] as TestMethod;
           changed = true;
@@ -262,7 +261,7 @@ function createMethodsStore() {
   };
   return {
     get: () => value,
-    setOne: (d: Direction, m: TestMethod) => {
+    setOne: (d: Facet, m: TestMethod) => {
       value = { ...value, [d]: m };
       AsyncStorage.setItem(methodKey(d), m).catch(() => {});
       emit();
@@ -279,8 +278,8 @@ const methodsStore = createMethodsStore();
 // All three facets' test methods. Used by the review screen (to pick how to show
 // a card) and the settings screen (to edit them).
 export function useTestMethods(): [
-  Record<Direction, TestMethod>,
-  (d: Direction, m: TestMethod) => void,
+  Record<Facet, TestMethod>,
+  (d: Facet, m: TestMethod) => void,
 ] {
   const value = useSyncExternalStore(methodsStore.subscribe, methodsStore.get, methodsStore.get);
   return [value, methodsStore.setOne];

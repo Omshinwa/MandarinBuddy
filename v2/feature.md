@@ -1,4 +1,4 @@
-# SuperAnki v2 — Features
+# MandarinBuddy v2 — Features
 
 Chinese vocab app: React Native (Expo SDK 54, iOS + web) · Hono + MongoDB server · shared TS package for SRS logic (unit-tested with vitest).
 

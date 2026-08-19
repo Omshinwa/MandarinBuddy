@@ -2,9 +2,10 @@ import { Hono } from "hono";
 
 export const ttsRoute = new Hono();
 
-// GET /api/tts?text=寂寞 — proxy Google Translate's Mandarin TTS (the old site's
-// voice). Browsers block direct cross-site loads from Google's endpoint, but
-// server-side requests get the audio fine.
+// GET /api/tts?text=寂寞
+// proxy Google Translate's Mandarin TTS
+// Browsers block direct cross-site loads from Google's endpoint
+// but server-side requests get the audio fine.
 ttsRoute.get("/", async (c) => {
   const text = c.req.query("text")?.trim();
   if (!text) return c.json({ error: "text required" }, 400);

@@ -1,14 +1,14 @@
 {
   "expo": {
-    "name": "SuperAnki",
-    "slug": "superanki",
+    "name": "MandarinBuddy",
+    "slug": "mandarinbuddy",
     "version": "1.0.0",
     "orientation": "portrait",
     "userInterfaceStyle": "automatic",
     "newArchEnabled": true,
     "ios": {
       "supportsTablet": false,
-      "bundleIdentifier": "com.omshinwa.superanki"
+      "bundleIdentifier": "com.omshinwa.mandarinbuddy"
     },
     "web": {
       "bundler": "metro",

@@ -1,12 +1,18 @@
 import React from "react";
 import { StyleSheet, Text, View } from "react-native";
-import { answerVerdict, pinyinVerdict, type MatchVerdict } from "../../../../shared/src/pinyin";
-import type { Direction, Grade, Srs, Word } from "../../../../shared/src/types";
+import {
+  type Facet,
+  type Grade,
+  lenientVerdict,
+  type MatchVerdict,
+  type Srs,
+  type Word,
+} from "../../../../shared/src";
 import { useTheme, type Theme } from "../../theme";
 import { SpeakButton } from "../SpeakButton";
 import { TextStyling } from "../TextStyling";
 
-// Everything a card needs to render one direction, decoupled from HOW it's
+// Everything a card needs to render one facet, decoupled from HOW it's
 // tested (flashcard vs. typed input). `facetView` builds it; FlashcardCard and
 // InputCard consume it.
 export interface FacetView {
@@ -21,23 +27,23 @@ export interface FacetView {
   inputSize?: number;
 }
 
-// Per-direction presentation. `scaffold` toggles the training-wheel aids; `fuzzy`
+// Per-facet presentation. `scaffold` toggles the training-wheel aids; `fuzzy`
 // only affects the reading match/placeholder; `minLen` is the input-leniency
 // threshold (how many characters a typed answer must match).
 export function facetView(
   word: Word,
-  direction: Direction,
+  facet: Facet,
   scaffold: boolean,
   fuzzy: boolean,
   minLen: number,
 ): FacetView {
-  switch (direction) {
+  switch (facet) {
     case "meaning":
       return {
         promptTop: scaffold ? word.pinyin : undefined,
         question: word.chinese,
         questionSize: 64,
-        check: (g) => answerVerdict(word.def_english, g, minLen),
+        check: (g) => lenientVerdict(word.english, g, false, minLen),
         placeholder: "meaning",
       };
     case "reading":
@@ -45,19 +51,19 @@ export function facetView(
         question: word.chinese,
         questionSize: 64,
         // Mature reading has no scaffold, so audio (the giveaway) stays off.
-        promptSub: scaffold ? word.def_english : undefined,
-        check: (g) => pinyinVerdict(word.pinyin, g, fuzzy, minLen),
+        promptSub: scaffold ? word.english : undefined,
+        check: (g) => lenientVerdict(word.pinyin, g, fuzzy, minLen),
         placeholder: fuzzy ? "pinyin (lenient)" : "pinyin",
       };
     case "writing":
       return {
         // Pinyin shown only for handwriting; for typed writing it's the answer to copy.
         promptTop: scaffold && word.learn_writing ? word.pinyin : undefined,
-        question: word.def_english,
+        question: word.english,
         questionSize: 26,
         promptNote: word.learn_writing ? "✍️ write the strokes" : "⌨️ type it",
         hint: word.comments || undefined,
-        check: (g) => answerVerdict(word.chinese, g, minLen),
+        check: (g) => lenientVerdict(word.chinese, g, false, minLen),
         placeholder: "中文",
         inputSize: 28,
       };
@@ -67,8 +73,8 @@ export function facetView(
 export interface CardProps {
   view: FacetView;
   word: Word; // the reveal renders straight off this; word.chinese is what's spoken
-  direction: Direction; // which facet is being tested — the reveal skips it as the question
-  srs: Srs; // the tested direction's state — used to preview next intervals
+  facet: Facet; // which facet is being tested — the reveal skips it as the question
+  srs: Srs; // the tested facet's state — used to preview next intervals
   scaffold: boolean;
   onGrade: (grade: Grade) => void;
   // Sends the card back to the end of the session queue without grading it —
@@ -126,7 +132,7 @@ export function PromptBlock({
   );
 }
 
-// The reveal is the same whatever the direction and whatever the test: the whole
+// The reveal is the same whatever the facet and whatever the test: the whole
 // word — character, pinyin, meaning, comment — so you always leave a card having
 // seen the full picture. The only thing that varies is that the question isn't
 // repeated: meaning/reading already show the character above, writing the
@@ -134,25 +140,25 @@ export function PromptBlock({
 // carries it instead, since the character is up there).
 export function AnswerBlock({
   word,
-  direction,
+  facet,
   t,
 }: {
   word: Word;
-  direction: Direction;
+  facet: Facet;
   t: Theme;
 }) {
   return (
     <>
-      {direction === "writing" && (
+      {facet === "writing" && (
         <View style={{ flexDirection: "row", alignItems: "center", gap: 10 }}>
           <TextStyling text={word.chinese} style={{ fontSize: 44, color: t.text }} />
           <SpeakButton text={word.chinese} size={20} />
         </View>
       )}
       <TextStyling text={word.pinyin} style={[styles.pinyinAnswer, { color: t.subtext }]} />
-      {direction !== "writing" && (
+      {facet !== "writing" && (
         <TextStyling
-          text={word.def_english}
+          text={word.english}
           style={{ fontSize: 26, color: t.text, textAlign: "center" }}
         />
       )}

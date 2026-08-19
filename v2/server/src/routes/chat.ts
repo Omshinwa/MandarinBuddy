@@ -1,12 +1,12 @@
-// check le prompt (how language is integrated, because rn it's really bad at following instructions)
-
-
 import { Hono } from "hono";
 import { streamSSE } from "hono/streaming";
 import OpenAI from "openai";
-import { applyGrade } from "../../../shared/src/srs";
-import { DEFAULT_USER_LANGUAGE } from "../../../shared/src/types";
-import type { ChatEvent, ChatMode, FlashcardProposal } from "../../../shared/src/types";
+import {
+  applyGrade,
+  type ChatEvent,
+  DEFAULT_USER_LANGUAGE,
+  type FlashcardProposal,
+} from "../../../shared/src";
 import { type ChatDoc, chats, words } from "../db";
 import {
   LOOKUP_CARD_TOOL,
@@ -42,19 +42,12 @@ const TOOLS: OpenAI.Chat.Completions.ChatCompletionTool[] = [
 // so both paths have to say the same thing.
 const CARD_SHOWN_RESULT = "card shown to the user with a one-tap Add button";
 
-function parseMode(value: string | undefined): ChatMode | null {
-  return value === "assistant" || value === "conversation" ? value : null;
-}
-
-// GET /api/chat/history?mode=
+// GET /api/chat/history
 chatRoute.get("/history", async (c) => {
-  const mode = parseMode(c.req.query("mode"));
-  if (!mode) return c.json({ error: "bad mode" }, 400);
-  const docs = await chats.find({ mode }).sort({ createdAt: 1 }).toArray();
+  const docs = await chats.find({}).sort({ createdAt: 1 }).toArray();
   return c.json(
     docs.map((d) => ({
       _id: d._id.toHexString(),
-      mode: d.mode,
       role: d.role,
       content: d.content,
       createdAt: d.createdAt.toISOString(),
@@ -62,18 +55,16 @@ chatRoute.get("/history", async (c) => {
   );
 });
 
-// DELETE /api/chat/history?mode=
+// DELETE /api/chat/history
 chatRoute.delete("/history", async (c) => {
-  const mode = parseMode(c.req.query("mode"));
-  if (!mode) return c.json({ error: "bad mode" }, 400);
-  await chats.deleteMany({ mode });
+  await chats.deleteMany({});
   return c.json({ ok: true });
 });
 
-// In conversation mode, credit dictionary words the user produced (once per word per day).
+// Credit dictionary words the user produced (once per word per day).
 async function creditUsedWords(message: string, now: Date): Promise<string[]> {
   const today = now.toISOString().slice(0, 10);
-  const all = await words.find({ srs: { $exists: true } }).toArray();
+  const all = await words.find({}).toArray();
   const credited: string[] = [];
   for (const w of all) {
     if (!w.chinese) continue;
@@ -85,7 +76,7 @@ async function creditUsedWords(message: string, now: Date): Promise<string[]> {
         $set: {
           // Nudges the card's schedule only — facets are untouched, since using a
           // word in conversation isn't an answer to any specific question type.
-          srs: applyGrade(w.srs!, "conversation_used", now),
+          srs: applyGrade(w.srs, "conversation_used", now),
           convCreditDate: today,
           updatedAt: now,
         },
@@ -114,18 +105,15 @@ async function runLookupCard(rawArgs: string): Promise<string> {
   if (!query) return JSON.stringify({ matches: [] });
   const rx = { $regex: escapeRegex(query), $options: "i" };
   const found = await words
-    .find({
-      srs: { $exists: true },
-      $or: [{ chinese: rx }, { pinyin: rx }, { def_english: rx }],
-    })
+    .find({ $or: [{ chinese: rx }, { pinyin: rx }, { english: rx }] })
     .limit(10)
     .toArray();
   return JSON.stringify({
     query,
     matches: found.map((w) => ({
       chinese: w.chinese,
-      pinyin: w.pinyin ?? "",
-      english: w.def_english ?? "",
+      pinyin: w.pinyin,
+      english: w.english,
     })),
   });
 }
@@ -150,27 +138,47 @@ function parseFlashcard(raw: string): FlashcardProposal | null {
       chinese: parsed.chinese.trim(),
       pinyin: parsed.pinyin.trim(),
       english: parsed.english.trim(),
-      example: typeof parsed.example === "string" ? parsed.example : "",
+      // `example` on the wire, `comments` everywhere else — see FlashcardProposal.
+      comments: typeof parsed.example === "string" ? parsed.example : "",
     };
   } catch {
     return null;
   }
 }
 
+// The inverse of parseFlashcard's field mapping, for replaying a stored proposal
+// back to the model. Without it the replayed tool call would use our field name
+// and quietly teach the model to answer with `comments` instead of `example`.
+function toWireCard(card: FlashcardProposal): Record<string, string> {
+  return {
+    chinese: card.chinese,
+    pinyin: card.pinyin,
+    english: card.english,
+    example: card.comments,
+  };
+}
+
+// We store the AI's turn as role "computer"; the API calls it "assistant". This
+// is the only place the two vocabularies meet — everything below builds API
+// requests, so "assistant" past this point always means the wire protocol.
+function toApiRole(role: ChatDoc["role"]): "user" | "assistant" {
+  return role === "computer" ? "assistant" : "user";
+}
+
 // Rebuild a stored chat turn into the OpenAI message(s) sent back to the model.
-// A plain turn is one message; an assistant turn that proposed flashcards is
+// A plain turn is one message; a computer turn that proposed flashcards is
 // expanded into the assistant tool_calls message plus a matching tool result for
 // each card, so the replayed history shows the model actually calling the tool
 // (not just narrating a word). tool_call_id must be unique and paired — we derive
 // it from the doc id so the assistant/tool messages line up.
 function replayHistoryDoc(d: ChatDoc): OpenAI.Chat.Completions.ChatCompletionMessageParam[] {
-  if (d.role !== "assistant" || !d.cards?.length) {
-    return [{ role: d.role, content: d.content }];
+  if (d.role !== "computer" || !d.cards?.length) {
+    return [{ role: toApiRole(d.role), content: d.content }];
   }
   const calls = d.cards.map((card, i) => ({
     id: `h${d._id.toHexString()}_${i}`,
     type: "function" as const,
-    function: { name: "propose_flashcard", arguments: JSON.stringify(card) },
+    function: { name: "propose_flashcard", arguments: JSON.stringify(toWireCard(card)) },
   }));
   return [
     { role: "assistant", content: d.content || null, tool_calls: calls },
@@ -182,18 +190,16 @@ function replayHistoryDoc(d: ChatDoc): OpenAI.Chat.Completions.ChatCompletionMes
   ];
 }
 
-// POST /api/chat  — body {mode, message?, reviewing?, kickoff?}; SSE stream of ChatEvent.
+// POST /api/chat  — body {message?, reviewing?, kickoff?}; SSE stream of ChatEvent.
 // kickoff = the user tapped "start review" with no message; we greet them without
 // storing a user turn.
 chatRoute.post("/", async (c) => {
   const body = (await c.req.json()) as {
-    mode?: string;
     message?: string;
     reviewing?: boolean;
     kickoff?: boolean;
     userLanguage?: string;
   };
-  const mode = parseMode(body.mode);
   const message = body.message?.trim();
   const kickoff = body.kickoff === true;
   const reviewing = body.reviewing === true || kickoff; // starting a review implies review mode
@@ -203,7 +209,7 @@ chatRoute.post("/", async (c) => {
     typeof body.userLanguage === "string" && body.userLanguage.trim()
       ? body.userLanguage.trim()
       : DEFAULT_USER_LANGUAGE;
-  if (!mode || (!message && !kickoff)) return c.json({ error: "mode and message required" }, 400);
+  if (!message && !kickoff) return c.json({ error: "message required" }, 400);
 
   if (!process.env.DEEPSEEK_API_KEY) {
     return c.json({ error: "DEEPSEEK_API_KEY is not set in server/.env" }, 500);
@@ -215,19 +221,19 @@ chatRoute.post("/", async (c) => {
   const now = new Date();
 
   if (message && !kickoff) {
-    await chats.insertOne({ mode, role: "user", content: message, createdAt: now } as never);
+    await chats.insertOne({ role: "user", content: message, createdAt: now } as never);
   }
 
   // System prompt goes in the messages array (OpenAI convention). No cache
   // annotations needed — DeepSeek context caching is automatic.
   const systemText = buildChatSystem(
     reviewing,
-    buildVocabBlock(await words.find({ srs: { $exists: true } }).toArray(), now),
+    buildVocabBlock(await words.find({}).toArray(), now),
     userLanguage,
   );
 
   const historyDocs = await chats
-    .find({ mode })
+    .find({})
     .sort({ createdAt: -1 })
     .limit(HISTORY_TURNS)
     .toArray();
@@ -242,13 +248,13 @@ chatRoute.post("/", async (c) => {
     const send = (ev: ChatEvent) => sse.writeSSE({ data: JSON.stringify(ev) });
 
     try {
-      if (mode === "conversation" && message && !kickoff) {
+      if (message && !kickoff) {
         const credited = await creditUsedWords(message, now);
         if (credited.length > 0) await send({ type: "credits", chinese: credited });
       }
 
-      let assistantText = "";
-      // Cards actually shown this turn — persisted with the assistant doc so the
+      let replyText = "";
+      // Cards actually shown this turn — persisted with the computer doc so the
       // tool call survives into replayed history (see replayHistoryDoc).
       const proposedCards: FlashcardProposal[] = [];
       // Tool loop: stream → if the model called propose_flashcard, forward it to the
@@ -276,7 +282,7 @@ chatRoute.post("/", async (c) => {
           if (!choice) continue;
           if (choice.delta?.content) {
             iterationText += choice.delta.content;
-            assistantText += choice.delta.content;
+            replyText += choice.delta.content;
             await send({ type: "delta", text: choice.delta.content });
           }
           for (const tc of choice.delta?.tool_calls ?? []) {
@@ -309,12 +315,9 @@ chatRoute.post("/", async (c) => {
               result = "invalid arguments; card not shown";
             } else {
               // Never propose a word that's already a card — check the deck first.
-              const existing = await words.findOne({
-                chinese: card.chinese,
-                srs: { $exists: true },
-              });
+              const existing = await words.findOne({ chinese: card.chinese });
               if (existing) {
-                result = `"${existing.chinese}" (${existing.def_english}) is already in the user's deck — tell them it's already saved; do not propose it again`;
+                result = `"${existing.chinese}" (${existing.english}) is already in the user's deck — tell them it's already saved; do not propose it again`;
               } else {
                 await send({ type: "flashcard", card });
                 proposedCards.push(card);
@@ -332,11 +335,10 @@ chatRoute.post("/", async (c) => {
         }
       }
 
-      if (assistantText.trim() || proposedCards.length > 0) {
+      if (replyText.trim() || proposedCards.length > 0) {
         await chats.insertOne({
-          mode,
-          role: "assistant",
-          content: assistantText,
+          role: "computer",
+          content: replyText,
           ...(proposedCards.length > 0 && { cards: proposedCards }),
           createdAt: new Date(),
         } as never);

@@ -15,7 +15,7 @@ const wordSchema = new mongoose.Schema({
     id: Number,
     chinese: String,
     pinyin: String,
-    def_english: String,
+    english: String,
     comments: String,
     learn_writing: Boolean,
     srs: srsSchema,

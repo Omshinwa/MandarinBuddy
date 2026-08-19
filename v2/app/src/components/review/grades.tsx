@@ -1,21 +1,20 @@
 import React from "react";
 import { Pressable, StyleSheet, Text, View } from "react-native";
-import { applyGrade } from "../../../../shared/src/srs";
-import type { Grade, Srs } from "../../../../shared/src/types";
+import { applyGrade, type Grade, type Srs } from "../../../../shared/src";
 import type { Theme } from "../../theme";
 
 // Reading & writing are typed tests, so the app grades them from how many tries
 // the answer took instead of asking: 1 try = Easy, 2–3 = Okay, 4+ = Hard.
 export function gradeForTries(tries: number): Grade {
   if (tries === 1) return "reviewed_easy";
-  if (tries <= 3) return "reviewed_remembered";
+  if (tries <= 3) return "reviewed_okay";
   return "reviewed_hard";
 }
 
 export function gradeLabel(g: Grade): string {
   return g === "reviewed_easy"
     ? "Easy"
-    : g === "reviewed_remembered"
+    : g === "reviewed_okay"
       ? "Okay"
       : g === "reviewed_hard"
         ? "Hard"
@@ -27,7 +26,7 @@ export function gradeColor(t: Theme, g: Grade): string {
     ? t.danger
     : g === "reviewed_hard"
       ? t.warning
-      : g === "reviewed_remembered"
+      : g === "reviewed_okay"
         ? t.success
         : t.tint;
 }
@@ -44,7 +43,7 @@ export function previewLabel(srs: Srs, grade: Grade): string {
 const GRADE_BUTTONS: { grade: Grade; label: string }[] = [
   { grade: "reviewed_forgot", label: "Forgot" },
   { grade: "reviewed_hard", label: "Hard" },
-  { grade: "reviewed_remembered", label: "Okay" },
+  { grade: "reviewed_okay", label: "Okay" },
   { grade: "reviewed_easy", label: "Easy" },
 ];
 

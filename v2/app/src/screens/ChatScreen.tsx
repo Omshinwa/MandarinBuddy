@@ -1,6 +1,5 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { isGlossable } from "../../../shared/src/srs";
-import type { Word } from "../../../shared/src/types";
+import { isGlossable, type Word } from "../../../shared/src";
 import { ChatThread } from "../components/ChatThread";
 import { api } from "../lib/api";
 
@@ -30,7 +29,6 @@ export function ChatScreen() {
 
   return (
     <ChatThread
-      mode="conversation"
       enableReview
       // Short enough to stay on one line — a wrapped placeholder makes the box
       // two rows tall on a phone and pushes the buttons out of the bar.

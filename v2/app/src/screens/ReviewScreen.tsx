@@ -10,9 +10,13 @@ import {
   Text,
   View,
 } from "react-native";
-import { applyGrade, isScaffolded } from "../../../shared/src/srs";
-import { DIRECTIONS } from "../../../shared/src/types";
-import type { Grade, ReviewItem } from "../../../shared/src/types";
+import {
+  applyGrade,
+  FACETS,
+  type Grade,
+  isScaffolded,
+  type ReviewItem,
+} from "../../../shared/src";
 import { PrimaryButton } from "../components/Button";
 import { MilestoneOverlay } from "../components/MilestoneOverlay";
 import { FlashcardCard } from "../components/review/FlashcardCard";
@@ -20,7 +24,7 @@ import { InputCard } from "../components/review/InputCard";
 import { ReviewChrome } from "../components/review/ReviewChrome";
 import { facetView } from "../components/review/CardParts";
 import { api } from "../lib/api";
-import { directionBadge } from "../lib/labels";
+import { facetBadge } from "../lib/labels";
 import {
   leniencyMinLen,
   resolveMethod,
@@ -92,14 +96,14 @@ export function ReviewScreen() {
     setBaseHue(Math.floor(Math.random() * 360));
     // Facets not set to "None" are the only ones the server should queue; if
     // every facet is None there's nothing to test, so skip the request.
-    const directions = DIRECTIONS.filter((d) => methods[d] !== "none");
-    if (directions.length === 0) {
+    const facets = FACETS.filter((d) => methods[d] !== "none");
+    if (facets.length === 0) {
       setQueue([]);
       setPhase("empty");
       return;
     }
     api
-      .reviewQueue(reviewBatch, directions)
+      .reviewQueue(reviewBatch, facets)
       .then((items) => {
         setQueue(items);
         setPhase(items.length ? "active" : "empty");
@@ -130,10 +134,10 @@ export function ReviewScreen() {
       if (idx + 1 >= next.length) {
         setPhase("done");
       } else if (count > 0) {
-        const switchedTo = next[idx + 1].direction !== item.direction ? next[idx + 1].direction : null;
+        const switchedTo = next[idx + 1].facet !== item.facet ? next[idx + 1].facet : null;
         if (switchedTo || runCount.current >= reviewBatch) {
           runCount.current = 0;
-          setMilestone({ count, changingTo: switchedTo && directionBadge(switchedTo) });
+          setMilestone({ count, changingTo: switchedTo && facetBadge(switchedTo) });
         }
       }
       if (requeue) setQueue(next);
@@ -147,7 +151,7 @@ export function ReviewScreen() {
       // Surface save failures instead of swallowing them: a dropped grade means
       // the card is still due on the next reload, which looks like the app
       // "forgot" your answer.
-      api.grade(item.word._id, item.direction, g).then(
+      api.grade(item.word._id, item.facet, g).then(
         () => setSaveError(null),
         (err) =>
           setSaveError(
@@ -262,10 +266,10 @@ export function ReviewScreen() {
   const scaffold = isScaffolded(item.word.srs, scaffoldMaxDays);
   // A facet set to "both" resolves to flashcard or input based on how mature the
   // card is; plain flashcard/input pass through unchanged.
-  const method = resolveMethod(methods[item.direction], item.word.srs.intervalDays, bothTransitionDays);
-  const view = facetView(item.word, item.direction, scaffold, fuzzy, leniencyMinLen(leniency));
+  const method = resolveMethod(methods[item.facet], item.word.srs.intervalDays, bothTransitionDays);
+  const view = facetView(item.word, item.facet, scaffold, fuzzy, leniencyMinLen(leniency));
   // Fuzzy only bites on a typed reading test — hide the toggle otherwise.
-  const showFuzzyToggle = item.direction === "reading" && method === "input";
+  const showFuzzyToggle = item.facet === "reading" && method === "input";
   const Card = method === "flashcard" ? FlashcardCard : InputCard;
   return (
     <ReviewChrome
@@ -275,7 +279,7 @@ export function ReviewScreen() {
           <Text style={{ color: t.subtext }}>
             {Math.min(idx + 1, queue.length)} / {queue.length}
           </Text>
-          <Text style={{ color: t.subtext }}>{directionBadge(item.direction)}</Text>
+          <Text style={{ color: t.subtext }}>{facetBadge(item.facet)}</Text>
           {showFuzzyToggle ? (
             <View style={{ flexDirection: "row", alignItems: "center", gap: 4 }}>
               <Text style={{ color: t.subtext, fontSize: 12 }}>fuzzy</Text>
@@ -312,7 +316,7 @@ export function ReviewScreen() {
           key={item.word._id + idx}
           view={view}
           word={item.word}
-          direction={item.direction}
+          facet={item.facet}
           srs={item.word.srs}
           scaffold={scaffold}
           onGrade={(g) => grade(item, g)}

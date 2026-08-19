@@ -15,30 +15,19 @@ import {
   View,
 } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
-import { stripNoise } from "../../../shared/src/pinyin";
-import { BUCKETS, intervalBucket, isSuspended } from "../../../shared/src/srs";
-import { DIRECTIONS } from "../../../shared/src/types";
+import { FACETS, normalizeText, type Word, type WordInput } from "../../../shared/src";
+import { BUCKETS, intervalBucket } from "../lib/buckets";
 import { OutlineButton, PrimaryButton } from "../components/Button";
 import { TextStyling } from "../components/TextStyling";
-import type { Word, WordInput } from "../../../shared/src/types";
 import { ApiError, api } from "../lib/api";
 import { confirm } from "../lib/confirm";
 import { useTheme, type Theme } from "../theme";
 
 const DAY_MS = 24 * 60 * 60 * 1000;
 
-// Fold both sides of the search the way a typed review answer is folded: case,
-// spaces, punctuation and the <> / * emphasis markers all drop out, so "图书馆"
-// finds 图<书>馆 and "to eat to have" finds "to eat, to have (a meal)". Tone
-// marks come off first (NFD splits an accented letter into base + combining
-// marks) — that part is search-only, so "ai" still matches "ài".
-function fold(s: string): string {
-  return stripNoise(s.normalize("NFD").replace(/[\u0300-\u036f]/g, ""));
-}
-
 // A word is a leech when its card got suspended after too many lapses.
 function isLeech(w: Word): boolean {
-  return isSuspended(w.srs);
+  return w.srs.suspended === true;
 }
 
 function dueLabel(w: Word, now: Date): { text: string; due: boolean } {
@@ -66,16 +55,18 @@ export function WordsScreen() {
 
   const now = new Date();
   const filtered = useMemo(() => {
-    const q = fold(search.trim());
+    // Search folds both sides like a typed answer, minus the tones: "ai" finds "ài".
+    const normalize_search = (s: string) => normalizeText(s, false, true);
+    const q = normalize_search(search.trim());
     return words.filter((w) => {
       if (leechOnly && !isLeech(w)) return false;
       if (bucketFilter !== null && intervalBucket(w.srs.intervalDays) !== bucketFilter) return false;
       if (!q) return true;
       return (
-        fold(w.chinese).includes(q) ||
-        fold(w.pinyin).includes(q) ||
-        fold(w.def_english).includes(q)
-        // || fold(w.comments).includes(q)
+        normalize_search(w.chinese).includes(q) ||
+        normalize_search(w.pinyin).includes(q) ||
+        normalize_search(w.english).includes(q)
+        // || normalize_search(w.comments).includes(q)
       );
     });
   }, [words, search, bucketFilter, leechOnly]);
@@ -186,7 +177,7 @@ export function WordsScreen() {
                   {isLeech(item) ? " 🐢" : ""}
                 </Text>
                 <TextStyling
-                  text={`${item.pinyin} — ${item.def_english}`}
+                  text={`${item.pinyin} — ${item.english}`}
                   style={{ color: t.subtext }}
                   numberOfLines={1}
                 />
@@ -261,7 +252,7 @@ function Chip({
 function WordSheet({ word, onClose, t }: { word: Word | null; onClose: (changed: boolean) => void; t: Theme }) {
   const [chinese, setChinese] = useState(word?.chinese ?? "");
   const [pinyin, setPinyin] = useState(word?.pinyin ?? "");
-  const [english, setEnglish] = useState(word?.def_english ?? "");
+  const [english, setEnglish] = useState(word?.english ?? "");
   const [comments, setComments] = useState(word?.comments ?? "");
   const [learnWriting, setLearnWriting] = useState(word?.learn_writing ?? false);
   const [error, setError] = useState<string | null>(null);
@@ -287,7 +278,7 @@ function WordSheet({ word, onClose, t }: { word: Word | null; onClose: (changed:
     const input: WordInput = {
       chinese: chinese.trim(),
       pinyin: pinyin.trim(),
-      def_english: english.trim(),
+      english: english.trim(),
       comments: comments.trim(),
       learn_writing: learnWriting,
     };
@@ -360,7 +351,7 @@ function WordSheet({ word, onClose, t }: { word: Word | null; onClose: (changed:
                 </Text>
                 {/* Per-facet mastery — drives which question type the review asks. */}
                 <Text style={{ color: t.subtext, fontSize: 12 }}>
-                  {DIRECTIONS.map((d) => `${d} ${word.facets?.[d]?.strength ?? 0}`).join(" · ")}
+                  {FACETS.map((d) => `${d} ${word.facets?.[d]?.strength ?? 0}`).join(" · ")}
                 </Text>
               </View>
             )}

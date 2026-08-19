@@ -1,7 +1,6 @@
 import React, { useMemo, useState } from "react";
 import { Text, type TextStyle } from "react-native";
-import { emphasizedPart, stripEmphasis } from "../../../shared/src/text";
-import type { Word } from "../../../shared/src/types";
+import { emphasizedPart, stripEmphasis, type Word } from "../../../shared/src";
 import { useTheme } from "../theme";
 
 interface Segment {
@@ -169,7 +168,7 @@ export function GlossedText({ text, words, onReveal, fontSize = 20, onLongPress 
                   {/* Pinyin follows the same rule as the character, so a card
                       written 话<题> / huà<tí> glosses 题 as "tí" — mark neither
                       or both, or the reading won't line up with what's shown. */}
-                  {` (${emphasizedPart(word.pinyin)} — ${stripEmphasis(word.def_english)})`}
+                  {` (${emphasizedPart(word.pinyin)} — ${stripEmphasis(word.english)})`}
                 </Text>
               )}
             </Text>

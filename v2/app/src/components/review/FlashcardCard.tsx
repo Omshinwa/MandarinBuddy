@@ -6,8 +6,8 @@ import { AnswerBlock, PromptBlock, ReviewCard, type CardProps } from "./CardPart
 import { GradeButtons } from "./grades";
 
 // Show the question, reveal the answer, and trust the user to self-grade. Any
-// direction — the meaning card's original behaviour, generalized.
-export function FlashcardCard({ view, word, direction, srs, scaffold, onGrade, t }: CardProps) {
+// facet — the meaning card's original behaviour, generalized.
+export function FlashcardCard({ view, word, facet, srs, scaffold, onGrade, t }: CardProps) {
   const [flipped, setFlipped] = useState(false);
   // Scaffolded: the word is read aloud up front.
   useEffect(() => {
@@ -32,7 +32,7 @@ export function FlashcardCard({ view, word, direction, srs, scaffold, onGrade, t
       <PromptBlock
         view={view}
         answered={flipped}
-        showSpeaker={direction !== "writing" && (scaffold || flipped)}
+        showSpeaker={facet !== "writing" && (scaffold || flipped)}
         speakText={word.chinese}
         t={t}
       />
@@ -40,7 +40,7 @@ export function FlashcardCard({ view, word, direction, srs, scaffold, onGrade, t
         <PrimaryButton label="Show answer" onPress={reveal} />
       ) : (
         <>
-          <AnswerBlock word={word} direction={direction} t={t} />
+          <AnswerBlock word={word} facet={facet} t={t} />
           <GradeButtons srs={srs} onGrade={onGrade} t={t} />
         </>
       )}

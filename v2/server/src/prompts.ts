@@ -1,4 +1,4 @@
-import { stripEmphasis } from "../../shared/src/text";
+import { stripEmphasis } from "../../shared/src";
 import type { WordDoc } from "./db";
 
 export const PROPOSE_FLASHCARD_TOOL = {
@@ -105,7 +105,7 @@ const VOCAB_LIMIT = 500;
 
 // Weak = due (or overdue), or still young (short interval).
 function isWeak(w: WordDoc, nowIso: string): boolean {
-  return w.srs!.due <= nowIso || w.srs!.intervalDays < 7;
+  return w.srs.due <= nowIso || w.srs.intervalDays < 7;
 }
 
 // Pinyin and full meaning are omitted on purpose — the model reconstructs them,
@@ -116,14 +116,14 @@ export function buildVocabBlock(all: WordDoc[], now: Date): string {
   // Emphasis markers are an authoring note on the card, not part of the word —
   // send the plain form so the model never echoes 话<题> back into the chat.
   const line = (w: WordDoc) =>
-    `${stripEmphasis(w.chinese)} — ${stripEmphasis(w.def_english ?? "")}${
+    `${stripEmphasis(w.chinese)} — ${stripEmphasis(w.english)}${
       isWeak(w, nowIso) ? " [weak]" : ""
     }`;
 
   // Most-overdue weak words first so truncation keeps the ones that matter.
   const weak = all
     .filter((w) => isWeak(w, nowIso))
-    .sort((a, b) => a.srs!.due.localeCompare(b.srs!.due));
+    .sort((a, b) => a.srs.due.localeCompare(b.srs.due));
   const rest = all.filter((w) => !isWeak(w, nowIso));
 
   // Mature words only get sampled when the deck overflows the limit; keep the

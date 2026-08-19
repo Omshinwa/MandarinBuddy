@@ -1,7 +1,12 @@
 import React, { useEffect, useRef, useState } from "react";
 import { Keyboard, Pressable, StyleSheet, Text, TextInput, View } from "react-native";
-import type { MatchVerdict } from "../../../../shared/src/pinyin";
-import type { Direction, Grade, Srs, Word } from "../../../../shared/src/types";
+import {
+  type Facet,
+  type Grade,
+  type MatchVerdict,
+  type Srs,
+  type Word,
+} from "../../../../shared/src";
 import type { Theme } from "../../theme";
 import { OutlineButton, PrimaryButton } from "../Button";
 import { speak } from "../SpeakButton";
@@ -127,7 +132,7 @@ function Result({
   outcome,
   tries,
   word,
-  direction,
+  facet,
   srs,
   onCommit,
   onRequeue,
@@ -137,7 +142,7 @@ function Result({
   outcome: { grade: Grade; gaveUp: boolean };
   tries: number;
   word: Word;
-  direction: Direction;
+  facet: Facet;
   srs: Srs;
   onCommit: (grade: Grade) => void;
   onRequeue?: () => void;
@@ -160,7 +165,7 @@ function Result({
   }, []);
   return (
     <>
-      <AnswerBlock word={word} direction={direction} t={t} />
+      <AnswerBlock word={word} facet={facet} t={t} />
       {/* Giving up needs no verdict line — the button below says what it commits. */}
       {!gaveUp && (
         <Text style={{ color, fontWeight: "800", fontSize: 16 }}>
@@ -189,12 +194,12 @@ function Result({
   );
 }
 
-// Type the answer; the app grades from how many tries it took. Any direction —
+// Type the answer; the app grades from how many tries it took. Any facet —
 // the reading/writing cards' original behaviour, generalized.
 export function InputCard({
   view,
   word,
-  direction,
+  facet,
   srs,
   scaffold,
   onGrade,
@@ -219,7 +224,7 @@ export function InputCard({
       <PromptBlock
         view={view}
         answered={!!outcome}
-        showSpeaker={direction !== "writing" && (scaffold || !!outcome)}
+        showSpeaker={facet !== "writing" && (scaffold || !!outcome)}
         speakText={word.chinese}
         t={t}
       />
@@ -249,7 +254,7 @@ export function InputCard({
           outcome={outcome}
           tries={wrongTries + 1}
           word={word}
-          direction={direction}
+          facet={facet}
           srs={srs}
           onCommit={onGrade}
           onRequeue={onRequeue}

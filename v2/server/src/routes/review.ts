@@ -1,14 +1,20 @@
 import { Hono } from "hono";
 import { ObjectId } from "mongodb";
-import { REVIEW_BATCH, applyGrade, newFacets, pickFacet, recordFacetAnswer } from "../../../shared/src/srs";
-import { DIRECTIONS } from "../../../shared/src/types";
-import type { Direction, Grade } from "../../../shared/src/types";
+import {
+  applyGrade,
+  type Facet,
+  FACETS,
+  type Grade,
+  pickFacet,
+  recordFacetAnswer,
+  REVIEW_BATCH,
+} from "../../../shared/src";
 import { serializeWord, words, type WordDoc } from "../db";
 
 export const reviewRoute = new Hono();
 
 const GRADES: Grade[] = [
-  "reviewed_remembered",
+  "reviewed_okay",
   "reviewed_forgot",
   "reviewed_hard",
   "reviewed_easy",
@@ -20,15 +26,15 @@ const GRADES: Grade[] = [
 // the pinyin, so a card with no pinyin is never asked for reading; meaning and
 // writing both need the English gloss. This keeps half-filled cards (e.g. a
 // character entered without its pinyin yet) out of the facets they can't answer.
-function facetAnswerable(w: WordDoc, d: Direction): boolean {
+function facetAnswerable(w: WordDoc, d: Facet): boolean {
   const has = (s?: string) => !!s && s.trim().length > 0;
   switch (d) {
     case "meaning":
-      return has(w.chinese) && has(w.def_english);
+      return has(w.chinese) && has(w.english);
     case "reading":
       return has(w.chinese) && has(w.pinyin);
     case "writing":
-      return has(w.chinese) && has(w.def_english);
+      return has(w.chinese) && has(w.english);
   }
 }
 
@@ -38,7 +44,7 @@ function facetAnswerable(w: WordDoc, d: Direction): boolean {
 // still revisited). Weakest words (shortest interval) come first.
 reviewRoute.get("/queue", async (c) => {
   const nowIso = new Date().toISOString();
-  const all = await words.find({ srs: { $exists: true } }).toArray();
+  const all = await words.find({}).toArray();
 
   // Client-chosen batch size (Settings → Review batch size); falls back to the
   // shared default for old clients. Clamped to ≥1 so the batching loop below
@@ -48,20 +54,20 @@ reviewRoute.get("/queue", async (c) => {
 
   // Facets the client will actually test — the ones NOT set to "None" in
   // Settings, sent as a comma-separated list. Old clients omit it, so default to
-  // all three directions.
-  const dirParam = c.req.query("directions");
-  const enabled: Direction[] = dirParam
-    ? (dirParam.split(",").filter((d) => DIRECTIONS.includes(d as Direction)) as Direction[])
-    : DIRECTIONS;
+  // all three facets.
+  const dirParam = c.req.query("facets");
+  const enabled: Facet[] = dirParam
+    ? (dirParam.split(",").filter((d) => FACETS.includes(d as Facet)) as Facet[])
+    : FACETS;
 
   const items = all
-    .filter((w) => w.srs!.due <= nowIso && !w.srs!.suspended)
+    .filter((w) => w.srs.due <= nowIso && !w.srs.suspended)
     .flatMap((w) => {
       // Only ask a facet that's both enabled in Settings and answerable from this
       // card's fields; a card with no eligible facet drops out of the queue.
       const eligible = enabled.filter((d) => facetAnswerable(w, d));
       if (eligible.length === 0) return [];
-      return [{ word: serializeWord(w), direction: pickFacet(w.facets ?? newFacets(), eligible) }];
+      return [{ word: serializeWord(w), facet: pickFacet(w.facets, eligible) }];
     });
 
   items.sort(
@@ -77,7 +83,7 @@ reviewRoute.get("/queue", async (c) => {
   // weakest (shortest-interval) card, so a session opens on your weakest facet
   // instead of always leading with "meaning". Since `items` is already
   // weakest-first, each pool's first item is its minimum interval.
-  const pools = DIRECTIONS.map((d) => items.filter((item) => item.direction === d))
+  const pools = FACETS.map((d) => items.filter((item) => item.facet === d))
     .filter((pool) => pool.length > 0)
     .sort((a, b) => a[0].word.srs.intervalDays - b[0].word.srs.intervalDays);
   const batched: typeof items = [];
@@ -86,21 +92,21 @@ reviewRoute.get("/queue", async (c) => {
   return c.json(batched);
 });
 
-// POST /api/review/grade  — body {wordId, direction, grade}
-// The grade drives the card's single schedule; `direction` is the facet that was
-// asked, whose mastery (and rotation counter) moves so the next ask can differ.
+// POST /api/review/grade  — body {wordId, facet, grade}
+// The grade drives the card's single schedule; `facet` names the question type
+// that was asked, whose mastery (and ask counter) moves so the next ask can differ.
 reviewRoute.post("/grade", async (c) => {
-  const body = (await c.req.json()) as { wordId?: string; direction?: Direction; grade?: Grade };
+  const body = (await c.req.json()) as { wordId?: string; facet?: Facet; grade?: Grade };
   if (!body.wordId || !ObjectId.isValid(body.wordId)) return c.json({ error: "bad wordId" }, 400);
-  if (!body.direction || !DIRECTIONS.includes(body.direction))
-    return c.json({ error: "bad direction" }, 400);
+  if (!body.facet || !FACETS.includes(body.facet))
+    return c.json({ error: "bad facet" }, 400);
   if (!body.grade || !GRADES.includes(body.grade)) return c.json({ error: "bad grade" }, 400);
 
   const word = await words.findOne({ _id: new ObjectId(body.wordId) });
   if (!word?.srs) return c.json({ error: "not found" }, 404);
 
   const next = applyGrade(word.srs, body.grade, new Date());
-  const facets = recordFacetAnswer(word.facets ?? newFacets(), body.direction, body.grade);
+  const facets = recordFacetAnswer(word.facets, body.facet, body.grade);
   const result = await words.findOneAndUpdate(
     { _id: word._id },
     { $set: { srs: next, facets, updatedAt: new Date() } },

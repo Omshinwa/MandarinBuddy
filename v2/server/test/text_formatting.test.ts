@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { emphasizedPart, splitEmphasis, stripEmphasis } from "../../shared/src/text";
+import { emphasizedPart, splitEmphasis, stripEmphasis } from "../../shared/src";
 
 // The <>/* markers on a card are a convention three places now depend on (the
 // review card's bold run, the chat gloss's word matching, the model's vocabulary

@@ -1,15 +1,14 @@
 import Constants from "expo-constants";
 import { fetch as expoFetch } from "expo/fetch";
-import type {
-  ChatEvent,
-  ChatMessage,
-  ChatMode,
-  Direction,
-  Grade,
-  ReviewItem,
-  Word,
-  WordInput,
-} from "../../../shared/src/types";
+import {
+  type ChatEvent,
+  type ChatMessage,
+  type Facet,
+  type Grade,
+  type ReviewItem,
+  type Word,
+  type WordInput,
+} from "../../../shared/src";
 import { getAppPassword } from "./settings";
 import { Utf8StreamDecoder } from "./utf8";
 
@@ -68,28 +67,26 @@ export const api = {
   ) =>
     request<Word>(`/api/words/${id}`, { method: "PUT", body: JSON.stringify(patch) }),
   deleteWord: (id: string) => request<{ ok: true }>(`/api/words/${id}`, { method: "DELETE" }),
-  reviewQueue: (batch?: number, directions?: Direction[]) => {
+  reviewQueue: (batch?: number, facets?: Facet[]) => {
     const params = new URLSearchParams();
     if (batch) params.set("batch", String(batch));
-    if (directions && directions.length) params.set("directions", directions.join(","));
+    if (facets && facets.length) params.set("facets", facets.join(","));
     const qs = params.toString();
     return request<ReviewItem[]>(`/api/review/queue${qs ? `?${qs}` : ""}`);
   },
-  grade: (wordId: string, direction: Direction, grade: Grade) =>
+  grade: (wordId: string, facet: Facet, grade: Grade) =>
     request<Word>("/api/review/grade", {
       method: "POST",
-      body: JSON.stringify({ wordId, direction, grade }),
+      body: JSON.stringify({ wordId, facet, grade }),
     }),
-  chatHistory: (mode: ChatMode) => request<ChatMessage[]>(`/api/chat/history?mode=${mode}`),
-  clearChat: (mode: ChatMode) =>
-    request<{ ok: true }>(`/api/chat/history?mode=${mode}`, { method: "DELETE" }),
+  chatHistory: () => request<ChatMessage[]>("/api/chat/history"),
+  clearChat: () => request<{ ok: true }>("/api/chat/history", { method: "DELETE" }),
 };
 
 // POST /api/chat and surface each SSE event as it streams in.
 // opts.kickoff starts a review with no user message; opts.reviewing carries the
 // current review-toggle state so the server can drill the user's due words.
 export async function streamChat(
-  mode: ChatMode,
   message: string,
   onEvent: (ev: ChatEvent) => void,
   opts?: { reviewing?: boolean; kickoff?: boolean; userLanguage?: string },
@@ -98,7 +95,6 @@ export async function streamChat(
     method: "POST",
     headers: { "content-type": "application/json", "x-app-password": getAppPassword() },
     body: JSON.stringify({
-      mode,
       message,
       reviewing: opts?.reviewing,
       kickoff: opts?.kickoff,

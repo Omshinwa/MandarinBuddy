@@ -50,7 +50,7 @@ app.get('/data/current/data:level.txt', async (req, res) => {
     // Format words as expected by client: chinese@english@pinyin@example
     const formatted = words.map(w => {
       const chinese = w.learn_writing ? `.${w.chinese}` : w.chinese;
-      return [chinese, w.def_english, w.pinyin, w.comments]
+      return [chinese, w.english, w.pinyin, w.comments]
         .filter(Boolean)
         .join(' @ ');
     }).join('\n');

@@ -1,26 +1,22 @@
 import { describe, expect, it } from "vitest";
 import {
-  answerContains,
-  answerVerdict,
-  pinyinContains,
-  pinyinVerdict,
-  stripNoise,
-} from "../../shared/src/pinyin";
-import {
-  TUNING,
   applyGrade,
   bumpStrength,
-  intervalBucket,
+  type Facet,
+  FACETS,
+  type FacetState,
   isDue,
   isLeechMilestone,
   isScaffolded,
-  isSuspended,
+  lenientVerdict,
   newFacets,
   newSrs,
+  normalizeText,
   pickFacet,
   recordFacetAnswer,
-} from "../../shared/src/srs";
-import type { Direction, Facet, Srs } from "../../shared/src/types";
+  type Srs,
+  TUNING,
+} from "../../shared/src";
 
 const NOW = new Date("2026-07-11T12:00:00.000Z");
 const DAY_MS = 24 * 60 * 60 * 1000;
@@ -37,13 +33,13 @@ const daysUntilDue = (srs: Srs) => (new Date(srs.due).getTime() - NOW.getTime())
 
 describe("applyGrade", () => {
   it("remembered: new word goes to a 1-day interval", () => {
-    const next = applyGrade(srsWith({ intervalDays: 0 }), "reviewed_remembered", NOW);
+    const next = applyGrade(srsWith({ intervalDays: 0 }), "reviewed_okay", NOW);
     expect(next.intervalDays).toBe(1);
     expect(daysUntilDue(next)).toBeCloseTo(1);
   });
 
   it("remembered: interval grows by ease", () => {
-    const next = applyGrade(srsWith({ intervalDays: 4 }), "reviewed_remembered", NOW);
+    const next = applyGrade(srsWith({ intervalDays: 4 }), "reviewed_okay", NOW);
     expect(next.intervalDays).toBeCloseTo(10); // 4 × 2.5
     expect(daysUntilDue(next)).toBeCloseTo(10);
   });
@@ -124,29 +120,29 @@ describe("leeches", () => {
 
   it("the 8th forgot suspends the card as a leech", () => {
     let srs = srsWith({ intervalDays: 5, lapses: 7 });
-    expect(isSuspended(srs)).toBe(false);
+    expect(srs.suspended).toBeFalsy();
     srs = applyGrade(srs, "reviewed_forgot", NOW);
     expect(srs.lapses).toBe(8);
-    expect(isSuspended(srs)).toBe(true);
+    expect(srs.suspended).toBe(true);
   });
 
   it("forgetting before the threshold does not suspend", () => {
     const srs = applyGrade(srsWith({ lapses: 3 }), "reviewed_forgot", NOW);
     expect(srs.lapses).toBe(4);
-    expect(isSuspended(srs)).toBe(false);
+    expect(srs.suspended).toBeFalsy();
   });
 
   it("a suspended card stays suspended through further lapses", () => {
     const srs = applyGrade(srsWith({ lapses: 9, suspended: true }), "reviewed_forgot", NOW);
-    expect(isSuspended(srs)).toBe(true);
+    expect(srs.suspended).toBe(true);
   });
 
   it("newSrs is not suspended", () => {
-    expect(isSuspended(newSrs(NOW))).toBe(false);
+    expect(newSrs(NOW).suspended).toBe(false);
   });
 });
 
-describe("newSrs / isDue / intervalBucket", () => {
+describe("newSrs / isDue", () => {
   it("newSrs seeds interval and staggers due", () => {
     const srs = newSrs(NOW, 7, 2);
     expect(srs.intervalDays).toBe(7);
@@ -156,12 +152,6 @@ describe("newSrs / isDue / intervalBucket", () => {
   it("isDue compares ISO strings correctly", () => {
     expect(isDue(srsWith({ due: NOW.toISOString() }), NOW)).toBe(true);
     expect(isDue(newSrs(NOW, 1), NOW)).toBe(false);
-  });
-
-  it("buckets cover all intervals", () => {
-    expect(intervalBucket(0)).toBe(0);
-    expect(intervalBucket(2)).toBe(1);
-    expect(intervalBucket(400)).toBe(6);
   });
 
   it("scaffolding applies below the threshold, and returns after a lapse", () => {
@@ -174,9 +164,9 @@ describe("newSrs / isDue / intervalBucket", () => {
   });
 });
 
-const facetsWith = (o: Partial<Record<Direction, Partial<Facet>>>): Record<Direction, Facet> => {
+const facetsWith = (o: Partial<Record<Facet, Partial<FacetState>>>): Record<Facet, FacetState> => {
   const base = newFacets();
-  for (const d of ["meaning", "reading", "writing"] as Direction[]) {
+  for (const d of ["meaning", "reading", "writing"] as Facet[]) {
     base[d] = { ...base[d], ...o[d] };
   }
   return base;
@@ -186,7 +176,7 @@ describe("bumpStrength", () => {
   it("moves mastery by grade: forgot -1, hard 0, remembered +1, easy +2", () => {
     expect(bumpStrength(3, "reviewed_forgot")).toBe(2);
     expect(bumpStrength(3, "reviewed_hard")).toBe(3);
-    expect(bumpStrength(3, "reviewed_remembered")).toBe(4);
+    expect(bumpStrength(3, "reviewed_okay")).toBe(4);
     expect(bumpStrength(3, "reviewed_easy")).toBe(5);
   });
 
@@ -206,7 +196,7 @@ describe("pickFacet / recordFacetAnswer", () => {
     expect(pickFacet(facets)).toBe("writing");
   });
 
-  it("breaks ties in DIRECTIONS order (fresh card starts with meaning)", () => {
+  it("breaks ties in FACETS order (fresh card starts with meaning)", () => {
     expect(pickFacet(newFacets())).toBe("meaning");
   });
 
@@ -225,7 +215,7 @@ describe("pickFacet / recordFacetAnswer", () => {
   it("weighted rotation: the weak facet is asked most, but strong ones still come up", () => {
     // meaning/reading known (strength 1), writing new — the user's own scenario.
     let facets = facetsWith({ meaning: { strength: 1 }, reading: { strength: 1 } });
-    const askedSeq: Direction[] = [];
+    const askedSeq: Facet[] = [];
     for (let i = 0; i < 8; i++) {
       const d = pickFacet(facets);
       askedSeq.push(d);
@@ -270,147 +260,157 @@ describe("pickFacet / recordFacetAnswer", () => {
   });
 });
 
-describe("pinyinContains (lenient reading match)", () => {
+describe("lenientVerdict — reading (typed pinyin)", () => {
   it("passes when the guess is a substring of the tone-marked pinyin", () => {
-    expect(pinyinContains("qíguài", "guài", false)).toBe(true); // trailing syllable
-    expect(pinyinContains("qíguài", "qí", false)).toBe(true); // leading syllable
-    expect(pinyinContains("qíguài", "qíguài", false)).toBe(true); // whole word
+    expect(lenientVerdict("qíguài", "guài", false)).toBe("match"); // trailing syllable
+    expect(lenientVerdict("qíguài", "qí", false)).toBe("match"); // leading syllable
+    expect(lenientVerdict("qíguài", "qíguài", false)).toBe("match"); // whole word
   });
 
   it("still requires the tone marks (no toneless / tone-number shortcut)", () => {
-    expect(pinyinContains("qíguài", "guai", false)).toBe(false);
-    expect(pinyinContains("qíguài", "qi2guai4", false)).toBe(false);
+    expect(lenientVerdict("qíguài", "guai", false)).not.toBe("match");
+    expect(lenientVerdict("qíguài", "qi2guai4", false)).not.toBe("match");
   });
 
   it("accepts even a single matching character (max leniency)", () => {
-    expect(pinyinContains("qíguài", "q", false)).toBe(true);
-    expect(pinyinContains("qíguài", "z", false)).toBe(false); // still must appear
+    expect(lenientVerdict("qíguài", "q", false)).toBe("match");
+    expect(lenientVerdict("qíguài", "z", false)).not.toBe("match"); // still must appear
   });
 
   it("folds circumflex vowels (â î ô û) onto the 3rd-tone carons", () => {
-    expect(pinyinContains("nǐ hǎo", "nî", false)).toBe(true); // nî → nǐ
-    expect(pinyinContains("qǐng", "qîng", false)).toBe(true);
+    expect(lenientVerdict("nǐ hǎo", "nî", false)).toBe("match"); // nî → nǐ
+    expect(lenientVerdict("qǐng", "qîng", false)).toBe("match");
   });
 
   it("case-folds before folding tones, so an uppercase circumflex still matches", () => {
-    expect(pinyinContains("nǐ hǎo", "NÎ", false)).toBe(true); // NÎ → nî → nǐ
-    expect(pinyinContains("Nǐ Hǎo", "nǐhǎo", false)).toBe(true);
+    expect(lenientVerdict("nǐ hǎo", "NÎ", false)).toBe("match"); // NÎ → nî → nǐ
+    expect(lenientVerdict("Nǐ Hǎo", "nǐhǎo", false)).toBe("match");
   });
 
   it("fuzzy makes 2nd and 3rd tones interchangeable inside the substring", () => {
-    expect(pinyinContains("nǐ", "ní", true)).toBe(true); // 2 accepted for 3
-    expect(pinyinContains("nǐ", "ní", false)).toBe(false); // exact: 2 ≠ 3
+    expect(lenientVerdict("nǐ", "ní", true)).toBe("match"); // 2 accepted for 3
+    expect(lenientVerdict("nǐ", "ní", false)).not.toBe("match"); // exact: 2 ≠ 3
   });
 });
 
-describe("answerContains (lenient writing match)", () => {
+describe("lenientVerdict — writing (typed hanzi / English)", () => {
   it("passes on a substring of a multi-character word", () => {
-    expect(answerContains("图书馆", "图书")).toBe(true);
-    expect(answerContains("图书馆", "图书馆")).toBe(true);
+    expect(lenientVerdict("图书馆", "图书")).toBe("match");
+    expect(lenientVerdict("图书馆", "图书馆")).toBe("match");
   });
 
   it("accepts a single matching character", () => {
-    expect(answerContains("图书馆", "图")).toBe(true); // 1 of 3 is enough now
-    expect(answerContains("好", "好")).toBe(true); // single-char word
-    expect(answerContains("图书馆", "书")).toBe(true); // middle char
+    expect(lenientVerdict("图书馆", "图")).toBe("match"); // 1 of 3 is enough now
+    expect(lenientVerdict("好", "好")).toBe("match"); // single-char word
+    expect(lenientVerdict("图书馆", "书")).toBe("match"); // middle char
   });
 
   it("ignores surrounding whitespace; empty never matches", () => {
-    expect(answerContains("图书馆", " 图书馆 ")).toBe(true);
-    expect(answerContains("图书馆", "   ")).toBe(false);
+    expect(lenientVerdict("图书馆", " 图书馆 ")).toBe("match");
+    expect(lenientVerdict("图书馆", "   ")).not.toBe("match");
   });
 
   it("a wrong character fails", () => {
-    expect(answerContains("图书馆", "图书店")).toBe(false);
+    expect(lenientVerdict("图书馆", "图书店")).not.toBe("match");
   });
 });
 
-describe("stripNoise (shared by answer matching and the word search)", () => {
+describe("normalizeText (shared by answer matching and the word search)", () => {
   it("drops case, spaces, punctuation and the emphasis markers", () => {
-    expect(stripNoise("图<书>馆")).toBe("图书馆");
-    expect(stripNoise("话*题*")).toBe("话题");
-    expect(stripNoise("To Eat, to have (a meal)")).toBe("toeattohaveameal");
+    expect(normalizeText("图<书>馆")).toBe("图书馆");
+    expect(normalizeText("话*题*")).toBe("话题");
+    expect(normalizeText("To Eat, to have (a meal)")).toBe("toeattohaveameal");
   });
 
-  it("keeps tone marks — folding those is the search's own business", () => {
-    expect(stripNoise("nǐ hǎo")).toBe("nǐhǎo");
+  it("keeps tone marks by default — in an answer the tone is part of the answer", () => {
+    expect(normalizeText("nǐ hǎo")).toBe("nǐhǎo");
+  });
+
+  it("toneless drops them, so the search finds 'ài' by typing 'ai'", () => {
+    expect(normalizeText("nǐ hǎo", false, true)).toBe("nihao");
+    expect(normalizeText("ài", false, true)).toBe("ai");
+  });
+
+  it("reads a circumflex as a 3rd tone either way", () => {
+    expect(normalizeText("nî")).toBe("nǐ");
+    expect(normalizeText("nî", false, true)).toBe("ni");
   });
 });
 
 describe("punctuation is stripped from both sides", () => {
   it("ignores the '<>' emphasis markers cards carry", () => {
-    expect(answerContains("你<好>", "你好")).toBe(true);
-    expect(answerContains("你好", "你<好>")).toBe(true);
-    expect(pinyinContains("nǐ <hǎo>", "nǐhǎo", false)).toBe(true);
+    expect(lenientVerdict("你<好>", "你好")).toBe("match");
+    expect(lenientVerdict("你好", "你<好>")).toBe("match");
+    expect(lenientVerdict("nǐ <hǎo>", "nǐhǎo", false)).toBe("match");
   });
 
   it("ignores punctuation in meanings", () => {
-    expect(answerContains("to eat, to have (a meal)", "to eat to have a meal")).toBe(true);
-    expect(answerContains("it's fine", "its fine")).toBe(true);
-    expect(answerContains("and/or", "and or")).toBe(true);
+    expect(lenientVerdict("to eat, to have (a meal)", "to eat to have a meal")).toBe("match");
+    expect(lenientVerdict("it's fine", "its fine")).toBe("match");
+    expect(lenientVerdict("and/or", "and or")).toBe("match");
   });
 
   it("ignores pinyin syllable separators", () => {
-    expect(pinyinContains("xī'ān", "xīān", false)).toBe(true);
-    expect(pinyinContains("nǐ hǎo", "nǐhǎo", false)).toBe(true);
+    expect(lenientVerdict("xī'ān", "xīān", false)).toBe("match");
+    expect(lenientVerdict("nǐ hǎo", "nǐhǎo", false)).toBe("match");
   });
 
   it("a punctuation-only guess never matches", () => {
-    expect(answerContains("图书馆", "，。")).toBe(false);
-    expect(answerContains("it's fine", "'''")).toBe(false);
+    expect(lenientVerdict("图书馆", "，。")).not.toBe("match");
+    expect(lenientVerdict("it's fine", "'''")).not.toBe("match");
   });
 
   it("still rejects a genuinely wrong answer", () => {
-    expect(answerContains("to eat, to have (a meal)", "to drink")).toBe(false);
+    expect(lenientVerdict("to eat, to have (a meal)", "to drink")).not.toBe("match");
   });
 
   it("minLen counts meaningful characters only", () => {
-    expect(answerContains("你<好>吗", "你好", 2)).toBe(true); // brackets don't pad the guess
-    expect(answerContains("你<好>吗", "你", 2)).toBe(false);
-    expect(answerContains("你<好>吗", "你好吗", Infinity)).toBe(true); // exact ignores markers
+    expect(lenientVerdict("你<好>吗", "你好", false, 2)).toBe("match"); // brackets don't pad the guess
+    expect(lenientVerdict("你<好>吗", "你", false, 2)).not.toBe("match");
+    expect(lenientVerdict("你<好>吗", "你好吗", false, Infinity)).toBe("match"); // exact ignores markers
   });
 });
 
 describe("input leniency (minLen)", () => {
   it("requires at least minLen matching characters", () => {
-    expect(answerContains("图书馆", "图", 2)).toBe(false); // 1 char, needs 2
-    expect(answerContains("图书馆", "图书", 2)).toBe(true); // 2 chars ok
-    expect(answerContains("图书馆", "图书", 3)).toBe(false); // needs 3
-    expect(answerContains("图书馆", "图书馆", 3)).toBe(true);
+    expect(lenientVerdict("图书馆", "图", false, 2)).not.toBe("match"); // 1 char, needs 2
+    expect(lenientVerdict("图书馆", "图书", false, 2)).toBe("match"); // 2 chars ok
+    expect(lenientVerdict("图书馆", "图书", false, 3)).not.toBe("match"); // needs 3
+    expect(lenientVerdict("图书馆", "图书馆", false, 3)).toBe("match");
   });
 
   it("caps the requirement at the answer's own length so short answers stay reachable", () => {
-    expect(answerContains("好", "好", 3)).toBe(true); // 1-char word, min(3,1)=1
+    expect(lenientVerdict("好", "好", false, 3)).toBe("match"); // 1-char word, min(3,1)=1
   });
 
   it("still requires the guess to actually appear", () => {
-    expect(answerContains("图书馆", "图店", 2)).toBe(false); // long enough, not a substring
+    expect(lenientVerdict("图书馆", "图店", false, 2)).not.toBe("match"); // long enough, not a substring
   });
 
   it("tells a too-short-but-correct guess apart from a wrong one", () => {
-    expect(answerVerdict("图书馆", "图", 2)).toBe("partial"); // right chars, not enough of them
-    expect(answerVerdict("图书馆", "图店", 2)).toBe("miss"); // not in the answer at all
-    expect(answerVerdict("图书馆", "图书", 2)).toBe("match");
-    expect(pinyinVerdict("qíguài", "qí", false, 4)).toBe("partial");
-    expect(pinyinVerdict("qíguài", "qí", false, Infinity)).toBe("partial"); // exact mode too
-    expect(pinyinVerdict("qíguài", "zh", false, 4)).toBe("miss");
+    expect(lenientVerdict("图书馆", "图", false, 2)).toBe("partial"); // right chars, not enough of them
+    expect(lenientVerdict("图书馆", "图店", false, 2)).toBe("miss"); // not in the answer at all
+    expect(lenientVerdict("图书馆", "图书", false, 2)).toBe("match");
+    expect(lenientVerdict("qíguài", "qí", false, 4)).toBe("partial");
+    expect(lenientVerdict("qíguài", "qí", false, Infinity)).toBe("partial"); // exact mode too
+    expect(lenientVerdict("qíguài", "zh", false, 4)).toBe("miss");
   });
 
   it("never reports partial at the most lenient setting", () => {
-    expect(answerVerdict("图书馆", "图", 1)).toBe("match");
-    expect(answerVerdict("好", "好", 3)).toBe("match"); // capped at the answer's length
-    expect(answerVerdict("图书馆", "", 2)).toBe("miss"); // empty is a miss, not a partial
+    expect(lenientVerdict("图书馆", "图", false, 1)).toBe("match");
+    expect(lenientVerdict("好", "好", false, 3)).toBe("match"); // capped at the answer's length
+    expect(lenientVerdict("图书馆", "", false, 2)).toBe("miss"); // empty is a miss, not a partial
   });
 
   it("exact (Infinity) demands the whole answer", () => {
-    expect(answerContains("图书馆", "图书", Infinity)).toBe(false);
-    expect(answerContains("图书馆", "图书馆", Infinity)).toBe(true);
-    expect(pinyinContains("qíguài", "qí", false, Infinity)).toBe(false);
-    expect(pinyinContains("qíguài", "qíguài", false, Infinity)).toBe(true);
+    expect(lenientVerdict("图书馆", "图书", false, Infinity)).not.toBe("match");
+    expect(lenientVerdict("图书馆", "图书馆", false, Infinity)).toBe("match");
+    expect(lenientVerdict("qíguài", "qí", false, Infinity)).not.toBe("match");
+    expect(lenientVerdict("qíguài", "qíguài", false, Infinity)).toBe("match");
   });
 
   it("minLen defaults to 1 (unchanged lenient behaviour)", () => {
-    expect(answerContains("图书馆", "图")).toBe(true);
-    expect(pinyinContains("qíguài", "qí", false)).toBe(true);
+    expect(lenientVerdict("图书馆", "图")).toBe("match");
+    expect(lenientVerdict("qíguài", "qí", false)).toBe("match");
   });
 });

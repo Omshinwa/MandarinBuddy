@@ -1,6 +1,6 @@
 import React from "react";
 import { StyleSheet, Text, type StyleProp, type TextStyle } from "react-native";
-import { splitEmphasis } from "../../../shared/src/text";
+import { splitEmphasis } from "../../../shared/src";
 
 // Drop-in <Text> for any card field the user authored (hanzi, pinyin, meaning,
 // notes): the emphasis markers (see shared/text.ts) render as bold and the

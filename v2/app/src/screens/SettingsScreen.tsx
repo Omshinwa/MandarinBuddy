@@ -1,9 +1,9 @@
 import { Pressable, ScrollView, StyleSheet, Switch, Text, View } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
-import { DIRECTIONS } from "../../../shared/src/types";
+import { FACETS } from "../../../shared/src";
 import { OutlineButton } from "../components/Button";
 import { confirm } from "../lib/confirm";
-import { DIRECTION_LABEL } from "../lib/labels";
+import { FACET_LABEL } from "../lib/labels";
 import {
   DEFAULT_BOTH_TRANSITION_DAYS,
   DEFAULT_FUZZY_PINYIN,
@@ -54,8 +54,8 @@ export function SettingsScreen({ onClose }: { onClose?: () => void }) {
   const [leniency, setLeniency] = useInputLeniency();
   const [reviewBatch, setReviewBatch] = useReviewBatch();
   // "both" also produces typed input on mature cards, so leniency/fuzzy apply.
-  const anyInput = DIRECTIONS.some((d) => methods[d] === "input" || methods[d] === "both");
-  const anyBoth = DIRECTIONS.some((d) => methods[d] === "both");
+  const anyInput = FACETS.some((d) => methods[d] === "input" || methods[d] === "both");
+  const anyBoth = FACETS.some((d) => methods[d] === "both");
 
   // Push every setter back to its default. We set values (rather than clearing
   // AsyncStorage) so every subscriber updates immediately — clearing storage
@@ -70,7 +70,7 @@ export function SettingsScreen({ onClose }: { onClose?: () => void }) {
       return;
     setThemePref(DEFAULT_THEME_PREF);
     setLanguage(DEFAULT_USER_LANGUAGE);
-    DIRECTIONS.forEach((d) => setMethod(d, DEFAULT_TEST_METHODS[d]));
+    FACETS.forEach((d) => setMethod(d, DEFAULT_TEST_METHODS[d]));
     setFuzzy(DEFAULT_FUZZY_PINYIN);
     setScaffoldMaxDays(DEFAULT_SCAFFOLD_MAX_DAYS);
     setBothTransitionDays(DEFAULT_BOTH_TRANSITION_DAYS);
@@ -131,9 +131,9 @@ export function SettingsScreen({ onClose }: { onClose?: () => void }) {
 
       <Section title="Review test method" hint="FLASHCARD: shows the answer and you judge yourself. INPUT: you have to type part of the answer to pass. BOTH: flashcard while the card is young, then Input once it matures. NONE: this facet is never tested." t={t}>
 
-        {DIRECTIONS.map((d) => (
+        {FACETS.map((d) => (
           <View key={d} style={s.methodRow}>
-            <Text style={s.label}>{DIRECTION_LABEL[d]}</Text>
+            <Text style={s.label}>{FACET_LABEL[d]}</Text>
             <Segmented
               value={methods[d]}
               options={[

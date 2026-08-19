@@ -13,7 +13,7 @@ import {
   View,
 } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
-import type { ChatMode, FlashcardProposal, Word } from "../../../shared/src/types";
+import { type ChatRole, type FlashcardProposal, type Word } from "../../../shared/src";
 import { api, streamChat } from "../lib/api";
 import { confirm } from "../lib/confirm";
 import { useAutoSpeak, useUserLanguage } from "../lib/settings";
@@ -23,7 +23,7 @@ import { FlashcardProposalCard } from "./FlashcardProposalCard";
 import { GlossedText } from "./GlossedText";
 import { speak } from "./SpeakButton";
 
-// What to actually read aloud from an assistant message. The Google voice is
+// What to actually read aloud from a computer message. The Google voice is
 // Mandarin, so reading romanization and markup back is noise: strip markdown
 // syntax and any parenthetical gloss — pinyin lives in "(tuījiàn)"-style parens
 // (ASCII or full-width) per the tutor prompt. Inline prose is left alone.
@@ -38,7 +38,7 @@ function speakableText(text: string): string {
 }
 
 type Item =
-  | { id: string; kind: "msg"; role: "user" | "assistant"; content: string }
+  | { id: string; kind: "msg"; role: ChatRole; content: string }
   | { id: string; kind: "card"; card: FlashcardProposal }
   | { id: string; kind: "credits"; chinese: string[] };
 
@@ -115,7 +115,6 @@ function IconButton({
 }
 
 interface Props {
-  mode: ChatMode;
   placeholder: string;
   emptyHint: string;
   gloss?: GlossConfig;
@@ -123,7 +122,7 @@ interface Props {
   enableReview?: boolean;
 }
 
-export function ChatThread({ mode, placeholder, emptyHint, gloss, onWordAdded, enableReview }: Props) {
+export function ChatThread({ placeholder, emptyHint, gloss, onWordAdded, enableReview }: Props) {
   const t = useTheme();
   const insets = useSafeAreaInsets();
   const [items, setItems] = useState<Item[]>([]);
@@ -188,7 +187,7 @@ export function ChatThread({ mode, placeholder, emptyHint, gloss, onWordAdded, e
 
   useEffect(() => {
     api
-      .chatHistory(mode)
+      .chatHistory()
       .then((msgs) =>
         setItems(
           msgs.map((m) => ({ id: newId(), kind: "msg", role: m.role, content: m.content })),
@@ -197,7 +196,7 @@ export function ChatThread({ mode, placeholder, emptyHint, gloss, onWordAdded, e
       .catch(() => {
         // history is a nice-to-have; the thread still works without it
       });
-  }, [mode]);
+  }, []);
 
   const updateItem = (id: string, patch: (item: Item) => Item) =>
     setItems((prev) => prev.map((item) => (item.id === id ? patch(item) : item)));
@@ -212,20 +211,19 @@ export function ChatThread({ mode, placeholder, emptyHint, gloss, onWordAdded, e
       if (message) {
         setItems((prev) => [...prev, { id: newId(), kind: "msg", role: "user", content: message }]);
       }
-      let assistantId = newId();
-      setItems((prev) => [...prev, { id: assistantId, kind: "msg", role: "assistant", content: "" }]);
+      let replyId = newId();
+      setItems((prev) => [...prev, { id: replyId, kind: "msg", role: "computer", content: "" }]);
       // Full reply text across bubble splits — spoken at the end when auto-read is on.
       let replyText = "";
 
       try {
         await streamChat(
-          mode,
           message ?? "",
           (ev) => {
             switch (ev.type) {
               case "delta": {
                 replyText += ev.text;
-                updateItem(assistantId, (item) =>
+                updateItem(replyId, (item) =>
                   item.kind === "msg" ? { ...item, content: item.content + ev.text } : item,
                 );
                 break;
@@ -233,11 +231,11 @@ export function ChatThread({ mode, placeholder, emptyHint, gloss, onWordAdded, e
               case "flashcard": {
                 // Close the current bubble; further text goes into a fresh one below the card.
                 const cardItem: Item = { id: newId(), kind: "card", card: ev.card };
-                assistantId = newId();
+                replyId = newId();
                 setItems((prev) => [
                   ...prev,
                   cardItem,
-                  { id: assistantId, kind: "msg", role: "assistant", content: "" },
+                  { id: replyId, kind: "msg", role: "computer", content: "" },
                 ]);
                 break;
               }
@@ -251,7 +249,7 @@ export function ChatThread({ mode, placeholder, emptyHint, gloss, onWordAdded, e
               case "error":
                 setItems((prev) => [
                   ...prev,
-                  { id: newId(), kind: "msg", role: "assistant", content: `⚠️ ${ev.message}` },
+                  { id: newId(), kind: "msg", role: "computer", content: `⚠️ ${ev.message}` },
                 ]);
                 break;
               case "done":
@@ -268,7 +266,7 @@ export function ChatThread({ mode, placeholder, emptyHint, gloss, onWordAdded, e
           {
             id: newId(),
             kind: "msg",
-            role: "assistant",
+            role: "computer",
             content: `⚠️ ${err instanceof Error ? err.message : "connection failed"}`,
           },
         ]);
@@ -276,7 +274,7 @@ export function ChatThread({ mode, placeholder, emptyHint, gloss, onWordAdded, e
         setBusy(false);
       }
     },
-    [busy, mode, reviewing, autoSpeak, userLanguage],
+    [busy, reviewing, autoSpeak, userLanguage],
   );
 
   const send = useCallback(() => {
@@ -307,7 +305,7 @@ export function ChatThread({ mode, placeholder, emptyHint, gloss, onWordAdded, e
 
   const clear = async () => {
     if (!(await confirm("Clear conversation?"))) return;
-    await api.clearChat(mode).catch(() => {});
+    await api.clearChat().catch(() => {});
     setItems([]);
   };
 
@@ -319,7 +317,7 @@ export function ChatThread({ mode, placeholder, emptyHint, gloss, onWordAdded, e
           ✨ practiced: {item.chinese.join("、")}
         </Text>
       );
-    if (item.role === "assistant" && item.content === "")
+    if (item.role === "computer" && item.content === "")
       return busy ? <Text style={[styles.typing, { color: t.subtext }]}>…</Text> : null;
 
     const isUser = item.role === "user";
@@ -351,7 +349,7 @@ export function ChatThread({ mode, placeholder, emptyHint, gloss, onWordAdded, e
           )}
         </View>
         {/* Long-press doesn't survive mobile web (the browser claims the gesture
-            for text selection), so assistant bubbles carry an explicit ⋯ button
+            for text selection), so computer bubbles carry an explicit ⋯ button
             that opens the same copy/speak menu. */}
         {!isUser && (
           <Pressable
@@ -522,7 +520,7 @@ const styles = StyleSheet.create({
   },
   list: { padding: 12, gap: 8 },
   hint: { textAlign: "center", marginTop: 40, paddingHorizontal: 30, fontSize: 15 },
-  // Bottom-aligned so the assistant row's ⋯ button sits level with the bubble's
+  // Bottom-aligned so the computer row's ⋯ button sits level with the bubble's
   // last line rather than floating beside its middle.
   bubbleRow: { flexDirection: "row", alignItems: "flex-end" },
   bubble: {
