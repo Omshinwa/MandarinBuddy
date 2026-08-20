@@ -1,3 +1,12 @@
+// DeepSeek exposes an OpenAI-compatible API — same code would work for any
+// OpenAI-compatible provider by changing the base URL, key and model.
+const DEEPSEEK_BASE_URL = "https://api.deepseek.com";
+const MODEL = "deepseek-chat";
+const HISTORY_TURNS = 30;
+
+// The tool result for a card that made it onto the user's screen.
+const CARD_SHOWN_RESULT = "card shown to the user with a one-tap Add button";
+
 import { Hono } from "hono";
 import { streamSSE } from "hono/streaming";
 import OpenAI from "openai";
@@ -8,43 +17,13 @@ import {
   type FlashcardProposal,
 } from "../../../shared/src";
 import { type ChatDoc, chats, words } from "../db";
-import {
-  LOOKUP_CARD_TOOL,
-  PROPOSE_FLASHCARD_TOOL,
-  SET_REVIEW_MODE_TOOL,
-  buildChatSystem,
-  buildVocabBlock,
-} from "../prompts";
-
-// DeepSeek exposes an OpenAI-compatible API — same code would work for any
-// OpenAI-compatible provider by changing the base URL, key and model.
-// The previous Claude implementation is preserved in chat_claude.old.
-const DEEPSEEK_BASE_URL = "https://api.deepseek.com";
-const MODEL = "deepseek-chat";
-const HISTORY_TURNS = 30;
+import { CHAT_TOOLS, buildChatSystem, buildVocabBlock } from "../prompts";
 
 export const chatRoute = new Hono();
 
-// Wrap each tool def (from prompts.ts) in OpenAI's function-tool shape. The
-// `strict` flag they carry is intentionally not forwarded — DeepSeek has no
-// strict schema mode, so arguments are validated by hand (see parseFlashcard).
-const TOOLS: OpenAI.Chat.Completions.ChatCompletionTool[] = [
-  PROPOSE_FLASHCARD_TOOL,
-  LOOKUP_CARD_TOOL,
-  SET_REVIEW_MODE_TOOL,
-].map((tool) => ({
-  type: "function",
-  function: { name: tool.name, description: tool.description, parameters: tool.input_schema },
-}));
-
-// The tool result for a card that made it onto the user's screen. Sent live when
-// the card is proposed, and replayed with the stored turn (see replayHistoryDoc),
-// so both paths have to say the same thing.
-const CARD_SHOWN_RESULT = "card shown to the user with a one-tap Add button";
-
 // GET /api/chat/history
 chatRoute.get("/history", async (c) => {
-  const docs = await chats.find({}).sort({ createdAt: 1 }).toArray();
+  const docs: ChatDoc[] = await chats.find({}).sort({ createdAt: 1 }).toArray();
   return c.json(
     docs.map((d) => ({
       _id: d._id.toHexString(),
@@ -88,6 +67,7 @@ async function creditUsedWords(message: string, now: Date): Promise<string[]> {
 }
 
 // Escape user input before dropping it into a MongoDB $regex.
+// Each match gets a backslash prepended
 function escapeRegex(s: string): string {
   return s.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
 }
@@ -138,24 +118,12 @@ function parseFlashcard(raw: string): FlashcardProposal | null {
       chinese: parsed.chinese.trim(),
       pinyin: parsed.pinyin.trim(),
       english: parsed.english.trim(),
-      // `example` on the wire, `comments` everywhere else — see FlashcardProposal.
-      comments: typeof parsed.example === "string" ? parsed.example : "",
+      // The only optional field: the model can omit it, or send a non-string.
+      comments: typeof parsed.comments === "string" ? parsed.comments : "",
     };
   } catch {
     return null;
   }
-}
-
-// The inverse of parseFlashcard's field mapping, for replaying a stored proposal
-// back to the model. Without it the replayed tool call would use our field name
-// and quietly teach the model to answer with `comments` instead of `example`.
-function toWireCard(card: FlashcardProposal): Record<string, string> {
-  return {
-    chinese: card.chinese,
-    pinyin: card.pinyin,
-    english: card.english,
-    example: card.comments,
-  };
 }
 
 // We store the AI's turn as role "computer"; the API calls it "assistant". This
@@ -166,27 +134,41 @@ function toApiRole(role: ChatDoc["role"]): "user" | "assistant" {
 }
 
 // Rebuild a stored chat turn into the OpenAI message(s) sent back to the model.
-// A plain turn is one message; a computer turn that proposed flashcards is
-// expanded into the assistant tool_calls message plus a matching tool result for
-// each card, so the replayed history shows the model actually calling the tool
-// (not just narrating a word). tool_call_id must be unique and paired — we derive
-// it from the doc id so the assistant/tool messages line up.
+// plus a matching tool result for each card, so the replayed history shows the model actually calling the tool
+// (not just narrating a word).
+
+// Two cases:
+// Plain turn (user turn, or a computer turn with no cards) → 1 message:
+// { role: "user",  content: "太 means what?" }        // ChatDoc{role:"user"}
+// { role: "assistant", content: "It means too..." }  // ChatDoc{role:"computer"}
+
+// A computer turn that proposed N flashcards → 1 + N messages:
+// expanded into the assistant tool_calls message
+// { role: "assistant", content: "...", tool_calls: [call_0, call_1] }
+// { role: "tool", tool_call_id: "h<docid>_0", content: CARD_SHOWN_RESULT }
+// { role: "tool", tool_call_id: "h<docid>_1", content: CARD_SHOWN_RESULT }
+
 function replayHistoryDoc(d: ChatDoc): OpenAI.Chat.Completions.ChatCompletionMessageParam[] {
   if (d.role !== "computer" || !d.cards?.length) {
+    // user message, or theres no flashcard proposal
     return [{ role: toApiRole(d.role), content: d.content }];
   }
+  // else, more complex
   const calls = d.cards.map((card, i) => ({
     id: `h${d._id.toHexString()}_${i}`,
     type: "function" as const,
-    function: { name: "propose_flashcard", arguments: JSON.stringify(toWireCard(card)) },
+    // as const because otherwise it's a string, but it needs to be literally "function"
+    function: { name: "propose_flashcard", arguments: JSON.stringify(card) },
   }));
   return [
     { role: "assistant", content: d.content || null, tool_calls: calls },
-    ...calls.map((c): OpenAI.Chat.Completions.ChatCompletionMessageParam => ({
-      role: "tool",
-      tool_call_id: c.id,
-      content: CARD_SHOWN_RESULT,
-    })),
+    ...calls.map(
+      (c): OpenAI.Chat.Completions.ChatCompletionMessageParam => ({
+        role: "tool",
+        tool_call_id: c.id,
+        content: CARD_SHOWN_RESULT,
+      }),
+    ),
   ];
 }
 
@@ -232,11 +214,7 @@ chatRoute.post("/", async (c) => {
     userLanguage,
   );
 
-  const historyDocs = await chats
-    .find({})
-    .sort({ createdAt: -1 })
-    .limit(HISTORY_TURNS)
-    .toArray();
+  const historyDocs = await chats.find({}).sort({ createdAt: -1 }).limit(HISTORY_TURNS).toArray();
   const messages: OpenAI.Chat.Completions.ChatCompletionMessageParam[] = [
     { role: "system", content: systemText },
     ...historyDocs.reverse().flatMap(replayHistoryDoc),
@@ -263,13 +241,13 @@ chatRoute.post("/", async (c) => {
         const stream = await deepseek.chat.completions.create({
           model: MODEL,
           messages,
-          tools: TOOLS,
+          tools: CHAT_TOOLS,
           stream: true,
           max_tokens: 4096,
           // DeepSeek's recommended setting for conversation. Note it also makes
           // longer non-Chinese passages wobble — French especially, where the
           // model is weak enough to sample non-words. Lower it if that shows up.
-          temperature: 1.3,
+          temperature: 1.2,
         });
 
         let iterationText = "";

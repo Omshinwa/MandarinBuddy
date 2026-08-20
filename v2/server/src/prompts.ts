@@ -1,60 +1,70 @@
+import type OpenAI from "openai";
 import { stripEmphasis } from "../../shared/src";
 import type { WordDoc } from "./db";
 
-export const PROPOSE_FLASHCARD_TOOL = {
-  name: "propose_flashcard",
-  description:
-    "Propose a flashcard for a Chinese word/phrase the user is learning. Call it whenever a specific word comes up — including when the user just sends a bare word to learn — so they can save it with one tap. If the word is already in their deck, the app reports that back instead of showing a duplicate, so you can call it freely.",
-  strict: true,
-  input_schema: {
-    type: "object" as const,
-    properties: {
-      chinese: { type: "string" },
-      pinyin: { type: "string", description: "with tone marks" },
-      english: { type: "string" },
-      example: {
-        type: "string",
-        description: "short example sentence with pinyin and translation",
+// The tools handed to the model on every chat turn. DeepSeek has no strict
+// schema mode, so no `strict` flag is set here — arguments are validated by
+// hand on arrival (see parseFlashcard in routes/chat.ts).
+export const CHAT_TOOLS: OpenAI.Chat.Completions.ChatCompletionTool[] = [
+  {
+    type: "function",
+    function: {
+      name: "propose_flashcard",
+      description:
+        "Propose a flashcard for a Chinese word/phrase the user is learning. Call it whenever a specific word comes up — including when the user just sends a bare word to learn — so they can save it with one tap. If the word is already in their deck, the app reports that back instead of showing a duplicate, so you can call it freely.",
+      parameters: {
+        type: "object",
+        properties: {
+          chinese: { type: "string" },
+          pinyin: { type: "string", description: "with tone marks" },
+          english: { type: "string" },
+          comments: {
+            type: "string",
+            description: "short example sentence with translation",
+          },
+        },
+        required: ["chinese", "pinyin", "english", "comments"],
+        additionalProperties: false,
       },
     },
-    required: ["chinese", "pinyin", "english", "example"],
-    additionalProperties: false,
   },
-};
-
-export const LOOKUP_CARD_TOOL = {
-  name: "lookup_card",
-  description:
-    "Search the user's saved flashcard deck to check whether a word/phrase is already a card. Call this before telling the user whether they've already saved something, or when they ask what is in their deck. Never guess — always look it up.",
-  strict: true,
-  input_schema: {
-    type: "object" as const,
-    properties: {
-      query: {
-        type: "string",
-        description:
-          "The word or phrase to search for — Chinese characters, pinyin, or the English meaning.",
+  {
+    type: "function",
+    function: {
+      name: "lookup_card",
+      description:
+        "Search the user's saved flashcard deck to check whether a word/phrase is already a card. Call this before telling the user whether they've already saved something, or when they ask what is in their deck. Never guess — always look it up.",
+      parameters: {
+        type: "object",
+        properties: {
+          query: {
+            type: "string",
+            description:
+              "The word or phrase to search for — Chinese characters, pinyin, or the English meaning.",
+          },
+        },
+        required: ["query"],
+        additionalProperties: false,
       },
     },
-    required: ["query"],
-    additionalProperties: false,
   },
-};
-
-export const SET_REVIEW_MODE_TOOL = {
-  name: "set_review_mode",
-  description:
-    "Turn the user's review session on or off. Call it when the user asks to start reviewing/practicing their words (on: true) or asks to stop (on: false), so the app's review indicator matches what you are doing.",
-  strict: true,
-  input_schema: {
-    type: "object" as const,
-    properties: {
-      on: { type: "boolean", description: "true to start a review session, false to end it" },
+  {
+    type: "function",
+    function: {
+      name: "set_review_mode",
+      description:
+        "Turn the user's review session on or off. Call it when the user asks to start reviewing/practicing their words (on: true) or asks to stop (on: false), so the app's review indicator matches what you are doing.",
+      parameters: {
+        type: "object",
+        properties: {
+          on: { type: "boolean", description: "true to start a review session, false to end it" },
+        },
+        required: ["on"],
+        additionalProperties: false,
+      },
     },
-    required: ["on"],
-    additionalProperties: false,
   },
-};
+];
 
 // One prompt for the whole Chat surface — the model acts as a tutor when asked
 // questions and as a conversation partner when the user chats in Chinese. When a

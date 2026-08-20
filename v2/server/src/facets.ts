@@ -1,47 +1,6 @@
-// How many cards a session serves before it stops.
-export const REVIEW_BATCH = 15;
-export const FACETS: Facet[] = ["meaning", "reading", "writing"];
+import { type Facet, FACET_TUNING, FACETS, type FacetState, type Grade } from "../../shared/src";
 
-export type Grade =
-  | "reviewed_forgot"
-  | "reviewed_hard"
-  | "reviewed_okay"
-  | "reviewed_easy"
-  | "conversation_used"
-  | "conversation_missed";
-
-// How hard the question picker leans on the weakest facet. Higher = a weak
-// facet is asked more times before a stronger one gets a turn.
-export const FACET_TUNING = {
-  facetBias: 2,
-  strengthCap: 8, // ceiling on a facet's mastery level
-};
-
-import type { Facet, FacetState, Word } from "./word";
-
-// :::::::::  :::::::::: :::     ::: ::::::::::: :::::::::: :::       :::
-// :+:    :+: :+:        :+:     :+:     :+:     :+:        :+:       :+:
-// +:+    +:+ +:+        +:+     +:+     +:+     +:+        +:+       +:+
-// +#++:++#:  +#++:++#   +#+     +:+     +#+     +#++:++#   +#+  +:+  +#+
-// +#+    +#+ +#+         +#+   +#+      +#+     +#+        +#+ +#+#+ +#+
-// #+#    #+# #+#          #+#+#+#       #+#     #+#         #+#+# #+#+#
-// ###    ### ##########     ###     ########### ##########   ###   ###
-
-export interface ReviewItem {
-  word: Word;
-  facet: Facet;
-}
-
-// A fresh card knows none of its three facets.
-export function newFacets(): Record<Facet, FacetState> {
-  return {
-    meaning: { strength: 0, asked: 0 },
-    reading: { strength: 0, asked: 0 },
-    writing: { strength: 0, asked: 0 },
-  };
-}
-
-export function bumpStrength(strength: number, grade: Grade): number {
+function bumpStrength(strength: number, grade: Grade): number {
   const delta =
     grade === "reviewed_forgot" || grade === "conversation_missed"
       ? -1

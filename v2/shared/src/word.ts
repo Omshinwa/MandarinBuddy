@@ -1,14 +1,13 @@
-// :::       :::  ::::::::  :::::::::  :::::::::  
-// :+:       :+: :+:    :+: :+:    :+: :+:    :+: 
-// +:+       +:+ +:+    +:+ +:+    +:+ +:+    +:+ 
-// +#+  +:+  +#+ +#+    +:+ +#++:++#:  +#+    +:+ 
-// +#+ +#+#+ +#+ +#+    +#+ +#+    +#+ +#+    +#+ 
-//  #+#+# #+#+#  #+#    #+# #+#    #+# #+#    #+# 
-//   ###   ###    ########  ###    ### #########  
+// :::       :::  ::::::::  :::::::::  :::::::::
+// :+:       :+: :+:    :+: :+:    :+: :+:    :+:
+// +:+       +:+ +:+    +:+ +:+    +:+ +:+    +:+
+// +#+  +:+  +#+ +#+    +:+ +#++:++#:  +#+    +:+
+// +#+ +#+#+ +#+ +#+    +#+ +#+    +#+ +#+    +#+
+//  #+#+# #+#+#  #+#    #+# #+#    #+# #+#    #+#
+//   ###   ###    ########  ###    ### #########
 
-// The shapes that live in Mongo. Anything transient — a grade you pressed, an
-// item handed to the review screen — belongs with its logic instead, in
-// ./srs or ./review.
+// The shapes that live in Mongo, plus the review-session vocabulary built on
+// top of them. Scheduling logic itself lives in ./srs.
 
 export interface WordInput {
   chinese: string;
@@ -44,3 +43,33 @@ export interface FacetState {
   strength: number;
   asked: number;
 }
+
+// ---------------------------------------------------------------------------
+// Review session shapes and tuning.
+
+// How many cards a session serves before it stops.
+export const REVIEW_BATCH = 15;
+export const FACETS: Facet[] = ["writing", "reading", "meaning"];
+
+export const GRADES = [
+  "reviewed_forgot",
+  "reviewed_hard",
+  "reviewed_okay",
+  "reviewed_easy",
+  "conversation_used",
+  "conversation_missed",
+] as const;
+
+export type Grade = (typeof GRADES)[number];
+
+export interface ReviewItem {
+  word: Word;
+  facet: Facet;
+}
+
+// How hard the question picker leans on the weakest facet. Higher = a weak
+// facet is asked more times before a stronger one gets a turn.
+export const FACET_TUNING = {
+  facetBias: 2,
+  strengthCap: 8, // ceiling on a facet's mastery level
+};

@@ -1,8 +1,7 @@
-import type { Srs } from "./word";
-import type { Grade } from "./review";
+import type { Grade, Srs } from "./word";
 
-// Every tuning constant lives here. The last two are read by ./review; the rest
-// serve applyGrade.
+// Every tuning constant applyGrade leans on. Facet-picking has its own knobs
+// (FACET_TUNING) over in ./word.
 export const TUNING = {
   startEase: 2.5,
   minEase: 1.3,
@@ -18,7 +17,6 @@ export const TUNING = {
   missedDivisor: 2, // conversation_missed halves the interval
   leechThreshold: 8, // Anki default: after this many lapses a card is a "leech" and gets suspended
 };
-
 
 const DAY_MS = 24 * 60 * 60 * 1000;
 
@@ -48,6 +46,7 @@ export function isLeechMilestone(lapses: number, threshold = TUNING.leechThresho
 const round1 = (n: number) => Math.round(n * 10) / 10; // intervals: 1 decimal
 const round2 = (n: number) => Math.round(n * 100) / 100; // ease: 2 decimals (steps of 0.15)
 
+// app runs it locally to preview intervals
 export function applyGrade(srs: Srs, grade: Grade, now: Date): Srs {
   switch (grade) {
     case "reviewed_okay": {

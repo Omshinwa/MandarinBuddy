@@ -5,27 +5,15 @@ import {
   type Facet,
   FACETS,
   type Grade,
-  pickFacet,
-  recordFacetAnswer,
+  GRADES,
   REVIEW_BATCH,
 } from "../../../shared/src";
+import { pickFacet, recordFacetAnswer } from "../facets";
 import { serializeWord, words, type WordDoc } from "../db";
 
 export const reviewRoute = new Hono();
 
-const GRADES: Grade[] = [
-  "reviewed_okay",
-  "reviewed_forgot",
-  "reviewed_hard",
-  "reviewed_easy",
-  "conversation_used",
-  "conversation_missed",
-];
-
-// A facet can only be asked if the fields it needs are filled in. Reading tests
-// the pinyin, so a card with no pinyin is never asked for reading; meaning and
-// writing both need the English gloss. This keeps half-filled cards (e.g. a
-// character entered without its pinyin yet) out of the facets they can't answer.
+// A facet can only be asked if the fields it needs are filled in. 
 function facetAnswerable(w: WordDoc, d: Facet): boolean {
   const has = (s?: string) => !!s && s.trim().length > 0;
   switch (d) {

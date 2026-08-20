@@ -1,23 +1,18 @@
 import { describe, expect, it } from "vitest";
 import {
   applyGrade,
-  bumpStrength,
   type Facet,
-  FACET_TUNING,
-  FACETS,
   type FacetState,
   isDue,
   isLeechMilestone,
   isScaffolded,
   lenientVerdict,
-  newFacets,
   newSrs,
   normalizeText,
-  pickFacet,
-  recordFacetAnswer,
   type Srs,
   TUNING,
 } from "../../shared/src";
+import { pickFacet, recordFacetAnswer } from "../src/facets";
 
 const NOW = new Date("2026-07-11T12:00:00.000Z");
 const DAY_MS = 24 * 60 * 60 * 1000;
@@ -165,6 +160,12 @@ describe("newSrs / isDue", () => {
   });
 });
 
+const newFacets = (): Record<Facet, FacetState> => ({
+  meaning: { strength: 0, asked: 0 },
+  reading: { strength: 0, asked: 0 },
+  writing: { strength: 0, asked: 0 },
+});
+
 const facetsWith = (o: Partial<Record<Facet, Partial<FacetState>>>): Record<Facet, FacetState> => {
   const base = newFacets();
   for (const d of ["meaning", "reading", "writing"] as Facet[]) {
@@ -172,22 +173,6 @@ const facetsWith = (o: Partial<Record<Facet, Partial<FacetState>>>): Record<Face
   }
   return base;
 };
-
-describe("bumpStrength", () => {
-  it("moves mastery by grade: forgot -1, hard 0, remembered +1, easy +2", () => {
-    expect(bumpStrength(3, "reviewed_forgot")).toBe(2);
-    expect(bumpStrength(3, "reviewed_hard")).toBe(3);
-    expect(bumpStrength(3, "reviewed_okay")).toBe(4);
-    expect(bumpStrength(3, "reviewed_easy")).toBe(5);
-  });
-
-  it("is bounded to [0, strengthCap]", () => {
-    expect(bumpStrength(0, "reviewed_forgot")).toBe(0);
-    expect(bumpStrength(FACET_TUNING.strengthCap, "reviewed_easy")).toBe(
-      FACET_TUNING.strengthCap,
-    );
-  });
-});
 
 describe("pickFacet / recordFacetAnswer", () => {
   it("asks the weakest facet first", () => {
@@ -199,8 +184,8 @@ describe("pickFacet / recordFacetAnswer", () => {
     expect(pickFacet(facets)).toBe("writing");
   });
 
-  it("breaks ties in FACETS order (fresh card starts with meaning)", () => {
-    expect(pickFacet(newFacets())).toBe("meaning");
+  it("breaks ties in FACETS order (fresh card starts with writing)", () => {
+    expect(pickFacet(newFacets())).toBe("writing");
   });
 
   it("restricts the pick to the allowed subset (facets set to None / unanswerable are skipped)", () => {

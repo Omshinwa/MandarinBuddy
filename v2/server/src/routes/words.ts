@@ -1,25 +1,18 @@
 import { Hono } from "hono";
 import { ObjectId } from "mongodb";
-import { newFacets, newSrs, type WordInput } from "../../../shared/src";
-import { serializeWord, words } from "../db";
+import { type Facet, type FacetState, newSrs, type WordInput } from "../../../shared/src";
+import { WordDoc, serializeWord, words } from "../db";
 
 export const wordsRoute = new Hono();
 
 // GET /api/words
 // return the whole deck, newest first
-// Searching and filtering are the client's job. 
+// Searching and filtering are the client's job.
 // both screens hold the full list in memory
 wordsRoute.get("/", async (c) => {
   const all = await words.find({}).sort({ createdAt: -1 }).toArray();
   return c.json(all.map(serializeWord));
 });
-
-function validateInput(body: Partial<WordInput>): string | null {
-  if (!body.chinese?.trim()) return "chinese is required";
-  if (!body.pinyin?.trim()) return "pinyin is required";
-  if (!body.english?.trim()) return "english is required";
-  return null;
-}
 
 // POST /api/words
 wordsRoute.post("/", async (c) => {
@@ -32,7 +25,7 @@ wordsRoute.post("/", async (c) => {
   if (existing) return c.json({ error: "already exists", word: serializeWord(existing) }, 409);
 
   const now = new Date();
-  const doc = {
+  const doc: WordDoc = {
     _id: new ObjectId(),
     chinese,
     pinyin: body.pinyin!.trim(),
@@ -69,6 +62,7 @@ wordsRoute.put("/:id", async (c) => {
   } else if (body.unsuspend) {
     // Reactivate a leech: clear the suspend flag. The card's lapse reset it to
     // due-now, so it returns to the queue immediately.
+    // Mongo interprets the dot as a path into subdocuments
     $set["srs.suspended"] = false;
   }
 
@@ -89,3 +83,23 @@ wordsRoute.delete("/:id", async (c) => {
   if (result.deletedCount === 0) return c.json({ error: "not found" }, 404);
   return c.json({ ok: true });
 });
+
+//#region helpers
+
+// A fresh card knows none of its three facets.
+function newFacets(): Record<Facet, FacetState> {
+  return {
+    meaning: { strength: 0, asked: 0 },
+    reading: { strength: 0, asked: 0 },
+    writing: { strength: 0, asked: 0 },
+  };
+}
+
+function validateInput(body: Partial<WordInput>): string | null {
+  if (!body.chinese?.trim()) return "chinese is required";
+  if (!body.pinyin?.trim()) return "pinyin is required";
+  if (!body.english?.trim()) return "english is required";
+  return null;
+}
+
+//#endregion
