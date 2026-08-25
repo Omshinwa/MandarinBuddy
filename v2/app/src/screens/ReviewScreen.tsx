@@ -148,11 +148,16 @@ export function ReviewScreen() {
 
   const grade = useCallback(
     (item: ReviewItem, g: Grade) => {
+      const graded = applyGrade(item.word.srs, g, new Date());
+      const gradedItem: ReviewItem = { ...item, word: { ...item.word, srs: graded } };
       // Surface save failures instead of swallowing them: a dropped grade means
       // the card is still due on the next reload, which looks like the app
       // "forgot" your answer.
       api.grade(item.word._id, item.facet, g).then(
-        () => setSaveError(null),
+        (word) => {
+          setSaveError(null);
+          setQueue((q) => q.map((it) => (it.word._id === word._id ? { ...it, word } : it)));
+        },
         (err) =>
           setSaveError(
             `Couldn't save your last answer — ${
@@ -172,9 +177,8 @@ export function ReviewScreen() {
       // A "good" answer (anything but Forgot) still grows the streak color.
       if (g !== "reviewed_forgot") setCorrect((c) => c + 1);
       // Forgot → re-show this session, UNLESS this lapse just turned the card
-      // into a leech (suspended) — then it leaves the session for good.
-      const graded = applyGrade(item.word.srs, g, new Date());
-      advance(item, g === "reviewed_forgot" && !graded.suspended, nextReviewed);
+      // into a leech (suspended) — then it leaves the session for good. 
+      advance(gradedItem, g === "reviewed_forgot" && !graded.suspended, nextReviewed);
     },
     [advance, reviewed],
   );

@@ -8,7 +8,7 @@ Chinese vocab app: React Native (Expo SDK 54, iOS + web) · Hono + MongoDB serve
 - **Tools** the model can call:
   - `propose_flashcard` — renders a one-tap card: compact "✓ Add 频率 card?" button → expands to an editable preview → saves to the deck.
   - `lookup_card` — regex search of the real deck (hanzi/pinyin/English) so "do I already have X?" is never guessed.
-  - `set_review_mode` — flips the app's review toggle from a natural-language request (via an SSE event).
+  - `end_review_mode` — only offered while a review is running; turns the app's review toggle off (via an SSE event) when the user asks to stop or the session peters out. Starting one is the user's tap only.
 - **Vocab in the prompt**: up to 500 deck words as `汉字 — gloss [weak]`, weakest/most-overdue first; pinyin omitted to save tokens; deterministic daily shuffle keeps the prompt cache-stable.
 - **SRS ↔ chat integration**: dictionary words in AI messages are highlighted — tap to reveal the gloss (counts as `conversation_missed`); words *you* produce correctly earn `conversation_used` credit (once per word per day).
 - Markdown `**bold**` / `*italic*` rendered; bubbles are selectable (long-press to copy).

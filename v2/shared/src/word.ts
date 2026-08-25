@@ -6,9 +6,7 @@
 //  #+#+# #+#+#  #+#    #+# #+#    #+# #+#    #+#
 //   ###   ###    ########  ###    ### #########
 
-// The shapes that live in Mongo, plus the review-session vocabulary built on
-// top of them. Scheduling logic itself lives in ./srs.
-
+// The shapes that live in Mongo
 export interface WordInput {
   chinese: string;
   pinyin: string;
@@ -17,6 +15,8 @@ export interface WordInput {
   learn_writing: boolean;
 }
 
+// plus the review-session state built on top.
+// Scheduling logic lives in ./srs
 export interface Word extends WordInput {
   _id: string;
   srs: Srs;

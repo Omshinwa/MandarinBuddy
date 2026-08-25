@@ -1,11 +1,3 @@
-//  ::::::::  :::    :::     ::: ::::::::::: 
-// :+:    :+: :+:    :+:   :+: :+:   :+:     
-// +:+        +:+    +:+  +:+   +:+  +:+     
-// +#+        +#++:++#++ +#++:++#++: +#+     
-// +#+        +#+    +#+ +#+     +#+ +#+     
-// #+#    #+# #+#    #+# #+#     #+# #+#     
-//  ########  ###    ### ###     ### ###     
-
 // The language the AI falls back to when it explains something outside Chinese.
 // Shared because both sides need the same value: the app seeds the setting with
 // it, and the server uses it when a client sends no language at all.
@@ -13,11 +5,11 @@ export const DEFAULT_USER_LANGUAGE = "English";
 
 export type ChatRole = "user" | "computer";
 
+// One stored turn, as GET /api/chat/history returns it
+// the front end forgets the tool calls
 export interface ChatMessage {
-  _id?: string;
   role: ChatRole;
   content: string;
-  createdAt: string;
 }
 
 // What the AI proposes when it calls propose_flashcard: a WordInput minus
@@ -30,6 +22,32 @@ export interface FlashcardProposal {
   pinyin: string;
   english: string;
   comments: string;
+}
+
+//  ::::::::  :::    :::     ::: :::::::::::
+// :+:    :+: :+:    :+:   :+: :+:   :+:
+// +:+        +:+    +:+  +:+   +:+  +:+
+// +#+        +#++:++#++ +#++:++#++: +#+
+// +#+        +#+    +#+ +#+     +#+ +#+
+// #+#    #+# #+#    #+# #+#     #+# #+#
+//  ########  ###    ### ###     ### ###
+
+// ChatRequest is the question (from the user), singular, sent up front.
+// ChatEvent is the answer (from the model), arriving in pieces.
+
+// Body of POST /api/chat
+// one ChatRequest per turn, the reply comes back as many ChatEvents.
+// Every field is optional because this lands as untrusted JSON off the wire;
+export interface ChatRequest {
+  message?: string;
+  // The review toggle's current state, so the server can drill due words.
+  reviewing?: boolean;
+  // "Start review" tapped with no message — the server greets the user without
+  // storing a user turn. Implies reviewing.
+  kickoff?: boolean;
+  // Explanation-fallback language from Settings; the server substitutes
+  // DEFAULT_USER_LANGUAGE when it's missing or blank.
+  userLanguage?: string;
 }
 
 // Events streamed over SSE (server sent events) from POST /api/chat

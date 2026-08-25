@@ -2,7 +2,8 @@ import type OpenAI from "openai";
 import { stripEmphasis } from "../../shared/src";
 import type { WordDoc } from "./db";
 
-// The tools handed to the model on every chat turn. DeepSeek has no strict
+// The tools handed to the model on every chat turn (see chatTools for the ones
+// that come and go with the review session). DeepSeek has no strict
 // schema mode, so no `strict` flag is set here — arguments are validated by
 // hand on arrival (see parseFlashcard in routes/chat.ts).
 export const CHAT_TOOLS: OpenAI.Chat.Completions.ChatCompletionTool[] = [
@@ -48,23 +49,25 @@ export const CHAT_TOOLS: OpenAI.Chat.Completions.ChatCompletionTool[] = [
       },
     },
   },
-  {
-    type: "function",
-    function: {
-      name: "set_review_mode",
-      description:
-        "Turn the user's review session on or off. Call it when the user asks to start reviewing/practicing their words (on: true) or asks to stop (on: false), so the app's review indicator matches what you are doing.",
-      parameters: {
-        type: "object",
-        properties: {
-          on: { type: "boolean", description: "true to start a review session, false to end it" },
-        },
-        required: ["on"],
-        additionalProperties: false,
-      },
-    },
-  },
 ];
+
+// Only offered while a session is running: the model can close a review, never
+// open one. Starting is the user's call — they tap the banner in the app.
+const END_REVIEW_TOOL: OpenAI.Chat.Completions.ChatCompletionTool = {
+  type: "function",
+  function: {
+    name: "end_review_mode",
+    description:
+      "End the user's review session, so the app's review indicator matches what you are doing. Call it when the user asks to stop reviewing, or when the session has run its course and the conversation has moved on to something else.",
+    parameters: { type: "object", properties: {}, additionalProperties: false },
+  },
+};
+
+// The tool list for one turn. `end_review_mode` only exists while a session is
+// active — with no session there is nothing to end.
+export function chatTools(reviewing: boolean): OpenAI.Chat.Completions.ChatCompletionTool[] {
+  return reviewing ? [...CHAT_TOOLS, END_REVIEW_TOOL] : CHAT_TOOLS;
+}
 
 // One prompt for the whole Chat surface — the model acts as a tutor when asked
 // questions and as a conversation partner when the user chats in Chinese. When a
@@ -77,22 +80,24 @@ export function buildChatSystem(
 ): string {
   return `You are a friendly Chinese tutor and conversation partner inside the user's personal vocabulary app.
 
-- Reply in Chinese. Your messages MUST be SHORT and NATURAL. You can use ${userLanguage} when you need to explain something.
+- Reply in Chinese. Your messages MUST be SHORT and NATURAL. You can use ${userLanguage} when you need to explain something or if the user asks a question in ${userLanguage}.
 - You message must not exceed 140 characters.
-- The user may ask a question or send a word/phrase to look up: A bare word or phrase sent with no other context (e.g. "自律?") means "teach me this word." An English word ("poem?") means "How do you say 'poem' in Chinese?"). ALWAYS reply with the Chinese word, its English meaning, pinyin (tone marks), and optionally a short example sentence with a translation — ALWAYS call the propose_flashcard function afterward to create a flashcard, even if they didn't spell out the request.
-- DO NOT MENTION or NARRATE the tools you want to use, (e.g. "oh let me look if the card already exists", just call the appropriate tools internally directly. DON'T mention the ideas of flashcard or word review.
-- For anything about the user's own deck ("do I already have 竞争?"), call lookup_card first and answer from its result — never guess. This is the ONLY TIME you can mention the cards.
+- The user may send a Chinese word/phrase with no other context (e.g. "自律?"). This means "teach me this word." An English word ("poem?") means "How do you say 'poem' in Chinese?"). ALWAYS call the propose_flashcard function afterward to create a flashcard, even if they didn't spell out the request.
+- For anything about the user's own deck ("do I already have 竞争?"), call lookup_card first and answer from its result.
+- DO NOT MENTION or NARRATE the tools you want to use, e.g. "oh let me look if the card already exists", just call the appropriate tools internally directly. DON'T mention the ideas of flashcard or word review (except when using the tool lookup_card).
 - If the user makes a mistake in Chinese, gently correct it.
 - Whatever language you write in, write it correctly: real words, correct spelling and grammar, no invented or half-formed words.
-- Add pinyin only for the occasional individual word that needs it, in parentheses right after it (推荐 (tuījiàn)). NEVER transcribe a whole Chinese sentence into pinyin. Don't add pinyin for words in the vocabulary list, these are already handled.
-- The user can start or stop a review session anytime; if they ask, call set_review_mode so the app's indicator matches.
+- Add pinyin only for the occasional individual word that needs it, in parentheses right after it (推荐 (tuījiàn)). NEVER transcribe a whole Chinese sentence into pinyin. 
+- Don't add pinyin or English translation for words in the vocabulary list, these are already handled.
+- A review session is the user's to start — they tap a button in the app for it. NEVER claim to have started one, and never offer to.
 ${
   reviewing
     ? `
 REVIEW SESSION IS ACTIVE — this is a conversation, NOT a quiz:
 - Weave in words from the vocabulary list below when it fits, preferring the ones marked [weak].
-- NEVER ask "X 是什么意思？" / "what does X mean". Instead pick a topic or little scenario connected to the user's [weak]/due words and actually talk about it: use those words in your OWN sentences and questions.
+- NEVER ask "X 是什么意思？" / "what does X mean". Instead pick a topic or little scenario connected to the user's [weak]/due words.
 - If the user just started reviewing, open with a topic that features a few of their weak words.
+- Call end_review_mode when the user asks to stop, or once the session has run its course and the conversation has clearly moved on — the app's indicator has to match.
 `
     : ""
 }

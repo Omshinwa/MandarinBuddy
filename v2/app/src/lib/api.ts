@@ -3,6 +3,7 @@ import { fetch as expoFetch } from "expo/fetch";
 import {
   type ChatEvent,
   type ChatMessage,
+  type ChatRequest,
   type Facet,
   type Grade,
   type ReviewItem,
@@ -89,17 +90,18 @@ export const api = {
 export async function streamChat(
   message: string,
   onEvent: (ev: ChatEvent) => void,
-  opts?: { reviewing?: boolean; kickoff?: boolean; userLanguage?: string },
+  opts?: Omit<ChatRequest, "message">,
 ): Promise<void> {
+  const body: ChatRequest = {
+    message,
+    reviewing: opts?.reviewing,
+    kickoff: opts?.kickoff,
+    userLanguage: opts?.userLanguage,
+  };
   const res = await expoFetch(`${API_BASE}/api/chat`, {
     method: "POST",
     headers: { "content-type": "application/json", "x-app-password": getAppPassword() },
-    body: JSON.stringify({
-      message,
-      reviewing: opts?.reviewing,
-      kickoff: opts?.kickoff,
-      userLanguage: opts?.userLanguage,
-    }),
+    body: JSON.stringify(body),
   });
   if (!res.ok || !res.body) {
     let msg = `HTTP ${res.status}`;

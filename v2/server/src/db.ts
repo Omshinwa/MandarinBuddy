@@ -8,16 +8,7 @@ export type WordDoc = Omit<Word, "_id" | "comments" | "createdAt"> & {
   updatedAt: Date;
 };
 
-import "dotenv/config";
-import { Collection, MongoClient, ObjectId } from "mongodb";
-import { type ChatRole, type FlashcardProposal, type Word } from "../../shared/src";
-
-const uri = process.env.MONGODB_URI;
-if (!uri) throw new Error("Set MONGODB_URI in server/.env");
-
-export const mongo = new MongoClient(uri);
-const db = mongo.db(); // database name comes from the URI
-
+// 1 message in the DB
 export interface ChatDoc {
   _id: ObjectId;
   role: ChatRole;
@@ -28,6 +19,16 @@ export interface ChatDoc {
   // Not sent to the client; the /history endpoint only exposes `content`.
   cards?: FlashcardProposal[];
 }
+
+import "dotenv/config";
+import { Collection, MongoClient, ObjectId } from "mongodb";
+import { type ChatRole, type FlashcardProposal, type Word } from "../../shared/src";
+
+const uri = process.env.MONGODB_URI;
+if (!uri) throw new Error("Set MONGODB_URI in server/.env");
+
+export const mongo = new MongoClient(uri);
+const db = mongo.db(); // database name comes from the URI
 
 export const words: Collection<WordDoc> = db.collection("words");
 export const chats: Collection<ChatDoc> = db.collection("chats");

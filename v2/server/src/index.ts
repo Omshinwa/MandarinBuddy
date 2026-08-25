@@ -33,6 +33,7 @@ app.get("/health", (c) => c.json({ ok: true }));
 // The login screen posts here to check a password before storing it — reaching
 // this handler at all means the gate above accepted the header.
 app.post("/api/auth/check", (c) => c.json({ ok: true }));
+
 app.route("/api/words", wordsRoute);
 app.route("/api/review", reviewRoute);
 app.route("/api/chat", chatRoute);
