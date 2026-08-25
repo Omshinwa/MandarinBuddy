@@ -1,18 +1,4 @@
-# MandarinBuddy v2 — Features
-
-Chinese vocab app: React Native (Expo SDK 54, iOS + web) · Hono + MongoDB server · shared TS package for SRS logic (unit-tested with vitest).
-
-## 💬 AI Chat — tutor + conversation partner (one thread)
-
-- DeepSeek (`deepseek-chat`, OpenAI-compatible API) streamed over **SSE**; a single system prompt covers both roles (word lookups vs Chinese small talk).
-- **Tools** the model can call:
-  - `propose_flashcard` — renders a one-tap card: compact "✓ Add 频率 card?" button → expands to an editable preview → saves to the deck.
-  - `lookup_card` — regex search of the real deck (hanzi/pinyin/English) so "do I already have X?" is never guessed.
-  - `end_review_mode` — only offered while a review is running; turns the app's review toggle off (via an SSE event) when the user asks to stop or the session peters out. Starting one is the user's tap only.
-- **Vocab in the prompt**: up to 500 deck words as `汉字 — gloss [weak]`, weakest/most-overdue first; pinyin omitted to save tokens; deterministic daily shuffle keeps the prompt cache-stable.
-- **SRS ↔ chat integration**: dictionary words in AI messages are highlighted — tap to reveal the gloss (counts as `conversation_missed`); words *you* produce correctly earn `conversation_used` credit (once per word per day).
-- Markdown `**bold**` / `*italic*` rendered; bubbles are selectable (long-press to copy).
-- **Review session** banner: AI drills weak/due words conversationally, corrects mistakes inline.
+# MandarinBuddy — Features
 
 ## 🗣️ Voice
 
@@ -31,19 +17,19 @@ Chinese vocab app: React Native (Expo SDK 54, iOS + web) · Hono + MongoDB serve
 - Typed answers checked: pinyin with tones (**fuzzy toggle**: 2nd/3rd tone interchangeable) or exact hanzi.
 - Legacy 3-schedule data was merged in-place; every word keeps its pre-merge state in `srs_legacy` for rollback.
 
-## 🎉 Review gamification
+## How scheduling works
 
-- Background hue rotates + saturation ramps with every correct answer (random start hue per session; lightness fixed for readability).
-- Milestone takeover every 25 correct answers — escalating tiers: 25 colorful → 50 crazier → 100 craziest (confetti count/speed, rainbow cycle, haptics).
-- Forgot → card requeues within the session (unless it just became a leech).
+Each word has **one** SRS state — `{due, intervalDays, ease, lapses}`, Anki's SM-2
+style. When the card comes due, the facet picker in `shared/src/srs.ts` chooses which
+of the three facets (meaning / reading / writing) to ask, based on per-facet
+`facets: {strength, asked}` — weakest facet most often, stronger ones still revisited.
+All tuning constants are in `shared/src/srs.ts` (`TUNING`). Grades:
 
-## 📚 Words screen
-
-- Search + color-coded interval buckets (palette carried over from the old site) + 🐢 leech filter.
-- Per-word: schedule (interval/ease/lapses) + per-facet mastery readout, edit/reset/reactivate/delete.
-
-## ⚙️ Plumbing worth knowing
-
-- `shared/` package: SRS algorithm + types used by both app and server, 37 unit tests.
-- Grades are saved per answer (`POST /api/review/grade`); failures surface in the UI instead of silently dropping progress.
-- Chat history persists in Mongo (last 30 turns sent as context); DeepSeek context caching is automatic.
+| grade                 | trigger                                     | effect                                                  |
+| --------------------- | ------------------------------------------- | ------------------------------------------------------- |
+| `reviewed_forgot`     | classic review "Forgot"                     | lapse: interval reset, ease −0.2, re-shown this session |
+| `reviewed_hard`       | classic review "Hard"                       | interval × 1.2, ease −0.15                              |
+| `reviewed_okay`       | classic review "Okay"                       | interval × ease, due pushed out                         |
+| `reviewed_easy`       | classic review "Easy"                       | interval × ease × 1.3 (min 4d), ease +0.15              |
+| `conversation_used`   | you typed a dictionary word in conversation | small bump on reading+writing (once/word/day)           |
+| `conversation_missed` | you tapped a gloss on a word the AI used    | meaning: interval halved, due now                       |

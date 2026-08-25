@@ -2,15 +2,16 @@ MandarinBuddy is a Chinese learning app, built for iOs + web.
 It uses a Spaced Repetition flashcards system with an AI chatbot and helper.
 
 <p align="center">
-<img src="docs/chat.webp" alt="Chat" width="290" style="max-width: 32%;" />
-<img src="docs/review.webp" alt="Review" width="290" style="max-width: 32%;" />
-<img src="docs/words.webp" alt="Words" width="290" style="max-width: 32%;" />
+<img src="docs/chat.webp" alt="Chat" height="450"/>
+<img src="docs/review.webp" alt="Review" height="450"/>
+<img src="docs/words.webp" alt="Words" height="450"/>
+<img src="docs/settings.webp" alt="Settings" height="450"/>
 </p>
 
 # Tech stack
 
 <p align="center">
-  <img src="docs/stack.webp" alt="MandarinBuddy stack" style="max-width: 900px; width: 100%;" />
+  <img src="docs/stack.webp" alt="MandarinBuddy stack" style="max-width: 800px; width: 100%;" />
 </p>
 
 One TypeScript codebase, three parts:
@@ -23,29 +24,40 @@ Words and chat logs live in the same MongoDB (`words` and `chats` collection).
 
 # Features
 
-<p align="center">
-  <img src="docs/chat2.webp" alt="Chat" width="290" style="max-width: 32%;" />
-  <img src="docs/review2.webp" alt="Review" width="290" style="max-width: 32%;" />
-  <img src="docs/review3.webp" alt="Review" width="290" style="max-width: 32%;" />
-</p>
-
-Three tabs:
+Three main tabs: Chat, Review, Words.
 
 ## Chat
 
-AI for conversations, check the existing flashcards and make new ones.
+<img src="docs/chat2.webp" alt="Chat" height="450" align="left" />
+
+**Assistant AI**: Conversational and Utility caller. DeepSeek (`deepseek-chat`, OpenAI-compatible API) streamed over **SSE**. Ability to lookup existing flashcards or create new ones. A single system prompt covers both roles.
+
+**Vocab in the prompt**: words from the deck are supplied so the AI can target them.
+
+**SRS ↔ chat integration**: dictionary words in messages are highlighted — tap it to show its definition inline (counts as `conversation_missed`); words the user produce correctly earn `conversation_used` credit.
+
+<br clear="both" />
 
 ## Review
 
-**Settings**
+<img src="docs/review3.webp" alt="Review" height="450" align="left"/>
+<img src="docs/review2.webp" alt="Review" height="450" align="left" />
 
-<p align="center">
-  <img src="docs/settings.webp" alt="Settings" width="290" style="max-width: 32%;" />
-  <img src="docs/settings2.webp" alt="Settings" width="290" style="max-width: 32%;" />
-  <img src="docs/settings3.webp" alt="Settings" width="290" style="max-width: 32%;" />
-</p>
+**Review**: due words, scheduled by SRS. Two modes: Direct typing input, or just flip the card.
 
-</div>
+**Three Aspects**: for each word, Meaning, Reading and Writing.
+
+<br clear="both" />
+
+## 📚 Words screen
+
+<img src="docs/words2.webp" alt="Review" height="450" align="left"/>
+
+- CRUD (create, read, update, delete) the words
+- Search + color-coded interval buckets.
+- Per-word: schedule (interval/ease/lapses) + per-facet mastery readout
+
+<br clear="both" />
 
 ## Run it
 
@@ -58,9 +70,7 @@ npm start          # http://localhost:6767
 ```
 
 `server/.env` needs `MONGODB_URI` and `DEEPSEEK_API_KEY`
-(platform.deepseek.com — required only for the Chat tab; words/review
-work without it). Chat runs on DeepSeek's OpenAI-compatible API
-(`deepseek-chat`).
+(required for the Chat tab; words/review work without it). 
 
 **App** (terminal 2):
 
@@ -86,45 +96,25 @@ bundler — no config needed on the same WiFi. To point elsewhere, set
 
 ```sh
 launch the server
-cd v2/server && npm run dev
+cd server && npm run dev
 launch the app
-cd v2/app && npm start
+cd app && npm start
 ```
 
 ### env vars (server/.env — see .env.example)
 
-- MONGODB_URI — the v2 server uses this name, NOT the old site's ATLAS_URI
-- DEEPSEEK_API_KEY — powers the chat/tutor
-- APP_PASSWORD — optional write gate (above)
+```
+MONGODB_URI - DB access
+DEEPSEEK_API_KEY -
+APP_PASSWORD — optional gate
+```
 
-### server: `npm run dev` vs `npm start`
-
-- `npm run dev` = `tsx watch` — auto-restarts when you edit server code. use this while developing.
-- `npm start` = `tsx` (no watch) — loads the code once and holds it in memory. if you edit server code you MUST ctrl-c and relaunch
-- either way, `.env` (e.g. MONGODB_URI) is read only at boot — changing it needs a manual restart.
-
-## test on phone
+## Test on phone
 
 Install **Expo Go** from the App Store / Play Store, then run `./launch.sh` (or
-`cd v2/app && npm start`) and scan the QR code with your phone (same Wi-Fi as
+`cd app && npm start`) and scan the QR code with your phone (same Wi-Fi as
 your Mac). If it won't connect, use `./launch-tunnel.sh`.
 
-## How scheduling works
-
-Each word has **one** SRS state — `{due, intervalDays, ease, lapses}`, Anki's SM-2
-style. When the card comes due, the facet picker in `shared/src/srs.ts` chooses which
-of the three facets (meaning / reading / writing) to ask, based on per-facet
-`facets: {strength, asked}` — weakest facet most often, stronger ones still revisited.
-All tuning constants are in `shared/src/srs.ts` (`TUNING`). Grades:
-
-| grade                 | trigger                                     | effect                                                  |
-| --------------------- | ------------------------------------------- | ------------------------------------------------------- |
-| `reviewed_forgot`     | classic review "Forgot"                     | lapse: interval reset, ease −0.2, re-shown this session |
-| `reviewed_hard`       | classic review "Hard"                       | interval × 1.2, ease −0.15                              |
-| `reviewed_okay`       | classic review "Okay"                       | interval × ease, due pushed out                         |
-| `reviewed_easy`       | classic review "Easy"                       | interval × ease × 1.3 (min 4d), ease +0.15              |
-| `conversation_used`   | you typed a dictionary word in conversation | small bump on reading+writing (once/word/day)           |
-| `conversation_missed` | you tapped a gloss on a word the AI used    | meaning: interval halved, due now                       |
 
 # Game-ification
 

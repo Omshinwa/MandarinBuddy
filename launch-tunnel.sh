@@ -34,7 +34,7 @@ if ss -tlnp 2>/dev/null | grep -q ':6767 '; then
   echo "→ backend already running on :6767 (reusing it)"
 else
   echo "→ starting backend on :6767"
-  ( cd "$ROOT/v2/server" && npm run dev ) &
+  ( cd "$ROOT/server" && npm run dev ) &
   BACKEND_PID=$!
   # wait for it to answer locally
   for i in $(seq 1 30); do
@@ -66,6 +66,6 @@ sleep 4
 echo "→ backend tunnel: $API_URL   (health: $API_URL/health)"
 
 # Start Expo over its own tunnel, pointing the app's API base at the backend tunnel.
-cd "$ROOT/v2/app"
+cd "$ROOT/app"
 EXPO_PUBLIC_API_URL="$API_URL" \
   npx expo start --tunnel --port 6768

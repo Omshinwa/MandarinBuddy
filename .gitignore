@@ -1,6 +1,9 @@
-node_modules
+node_modules/
 .DS_Store
 .env
+.expo/
+dist/
+*.log
 notes.md
 .prettierignore
 .prettierrc

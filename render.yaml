@@ -1,7 +1,7 @@
 # Render Blueprint — https://render.com/docs/blueprint-spec
 # Deploys both halves of SuperAnki v2:
-#   - superanki-server: the Hono API (v2/server)
-#   - superanki-web:    the Expo web build served as a static site (v2/app)
+#   - superanki-server: the Hono API (server/)
+#   - superanki-web:    the Expo web build served as a static site (app/)
 # Render clones the whole repo, so the server's imports from ../shared resolve.
 #
 # To use: push this repo to GitHub, then in Render → New → Blueprint, pick the
@@ -13,7 +13,7 @@ services:
     name: superanki-server
     runtime: node
     plan: free
-    rootDir: v2/server
+    rootDir: server
     buildCommand: npm install
     startCommand: npm start
     healthCheckPath: /health
@@ -30,7 +30,7 @@ services:
   - type: web
     name: superanki-web
     runtime: static
-    rootDir: v2/app
+    rootDir: app
     buildCommand: npm install && npm run export:web
     staticPublishPath: dist
     autoDeploy: true

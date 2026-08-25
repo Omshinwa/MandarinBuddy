@@ -104,7 +104,14 @@ function TypedInput({
       ) : null}
       <TextInput
         ref={inputRef}
-        style={[styles.answerInput, { backgroundColor: t.inputBg, color: t.text, fontSize }]}
+        // fontSize goes in its own object: an inline `fontSize: undefined` would
+        // override answerInput's size on native (RN's flattenStyle copies undefined
+        // keys) while react-native-web quietly ignores it — same code, two sizes.
+        style={[
+          styles.answerInput,
+          { backgroundColor: t.inputBg, color: t.text },
+          fontSize != null && { fontSize },
+        ]}
         value={answer}
         onChangeText={onEdit}
         placeholder={placeholder}

@@ -7,7 +7,7 @@
 #   - Expo bundles on :6768 in LAN mode
 #
 # EXPO_PUBLIC_API_URL is deliberately left unset: with no explicit value, the app
-# derives the API host itself (guessBase in v2/app/src/lib/api.ts) — from the Expo
+# derives the API host itself (guessBase in app/src/lib/api.ts) — from the Expo
 # dev-server host on a device, or the page origin on web — and hits port 6767 there.
 #
 # Just: ./launch.sh   then scan the QR. If the phone can't reach the backend
@@ -40,7 +40,7 @@ if curl -sf --max-time 2 http://localhost:6767/health >/dev/null 2>&1; then
   echo "→ backend already running on :6767 (reusing it)"
 else
   echo "→ starting backend on :6767"
-  ( cd "$ROOT/v2/server" && npm run dev ) &
+  ( cd "$ROOT/server" && npm run dev ) &
   BACKEND_PID=$!
   ready=""
   for _ in $(seq 1 30); do
@@ -48,7 +48,7 @@ else
     sleep 1
   done
   if [ -z "$ready" ]; then
-    echo "✗ backend never answered on :6767 — check v2/server/.env (MONGODB_URI)." >&2
+    echo "✗ backend never answered on :6767 — check server/.env (MONGODB_URI)." >&2
     exit 1
   fi
 fi
@@ -62,5 +62,5 @@ else
   echo "→ backend: http://localhost:6767  (no LAN IP found — a phone won't reach this)"
 fi
 
-cd "$ROOT/v2/app"
+cd "$ROOT/app"
 npx expo start --port 6768 "$@"
