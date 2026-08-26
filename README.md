@@ -1,5 +1,5 @@
-MandarinBuddy is a Chinese learning app, built for iOS + web. It was built for personal use (there's a single password protection).
-It uses a Spaced Repetition flashcards system with an AI chatbot and helper.
+MandarinBuddy is a Chinese learning app for iOS and web: spaced-repetition flashcards with an AI tutor.
+Built for personal use. Currently hosted on `https://superanki-web.onrender.com/` and `https://superanki-server.onrender.com/`, but password protected.
 
 <p align="center">
 <img src="docs/chat.webp" alt="Chat" height="450"/>
@@ -45,11 +45,11 @@ Three main tabs: Chat, Review, Words.
 <img src="docs/chat.webp" alt="Chat" height="450" align="left" />
 <img src="docs/chat2.webp" alt="Chat" height="450" align="left" />
 
-**Assistant AI**: chats with you and can call tools to look up or create flashcards. DeepSeek (`deepseek-chat`, OpenAI-compatible API) streamed over **SSE**. A single system prompt covers both roles.
+**AI tutor**: chats with you and can look up or create flashcards on the fly. DeepSeek (`deepseek-chat`, OpenAI-compatible API), streamed over **SSE**.
 
-**Vocab in the prompt**: words from the deck are supplied so the AI can target them.
+**Deck-aware**: your own vocabulary is fed to the model so it steers conversation toward the words you're learning.
 
-**SRS ↔ chat integration**: dictionary words in messages are highlighted — tap one to show its definition inline (counts as `conversation_missed`); words the user produces correctly earn `conversation_used` credit.
+**Chat feeds the SRS**: known words are highlighted — tap one for its definition (marks it forgotten); use one correctly yourself and it marks as remembered.
 
 **Dictation** (🎤): free Web Speech API, web build only.
 
@@ -66,7 +66,7 @@ Three main tabs: Chat, Review, Words.
 
 **Auto-read**: words are read by default using Google Translate's public voice, proxied through the server at `/api/tts`. Chat messages are also read this way. Falls back to the device voice (`expo-speech`).
 
-**Scaffold learning**: young cards come with training wheels. The threshold is configurable in Settings. Some hints are then given. Once the card mature, those aids are dropped.
+**Scaffold learning**: young cards come with training wheels — extra hints that drop away as the card matures.
 
 <br clear="both" />
 
@@ -75,9 +75,9 @@ Three main tabs: Chat, Review, Words.
 <img src="docs/words.webp" alt="Words" height="450" align="left"/>
 <img src="docs/words2.webp" alt="Words" height="450" align="left"/>
 
-- **CRUD** (create, read, update, delete) the words
-- **Search** + color-coded interval buckets.
-  **Scheduling**: Each word has its own schedule. It's a SM-2 variant (Anki-style): ease, intervals, lapses and failures. + stats to track each facets (meaning, reading, writing) mastery.
+**CRUD + search** over the deck, with color-coded interval buckets.
+
+**Scheduling**: an SM-2 variant (Anki-style) — ease, intervals, lapses — tracked per word, with separate mastery stats for meaning, reading and writing.
 
 <br clear="both" />
 
@@ -110,21 +110,21 @@ bundler — no config needed on the same WiFi. To point elsewhere, set
 
 <img src="docs/review4.webp" alt="Review" height="450" align="left" />
 
-There are several designs to make the app/language learning process fun. Incentivizing the user to return to the app without it feeling like a chore:
+A few design choices meant to make the language learning process more pleasant and fun.
 
 **Snappy UI**: this first came for free. Contrary to apps like Duolingo, there are no animations, no mascot, no chest or rewards to open. The time lost between reviews is minimal and the feedback is instant.
 
 **Batch Size**: learning sessions are made more digestible by allowing the user to choose the size of the batches (in the settings). After finishing one batch, the user is met with a Breather Screen.
 
-**Breather Screen**: between every batch, there's a congratulation screen (in the form of confetti and fireworks). It doubles as a breather/checkpoint screen. Before that, they were constantly bombarded with words, if they stopped before, they would have to stop while reviewing a flashcard, that specific flashcard's grade wouldn't be saved, so they are incited to keep going until they reach the checkpoint.
+**Breather screen**: each batch ends on a congratulation screen (confetti and fireworks). It's a checkpoint as much as a reward — quitting mid-card loses that card's grade, so there's always a reason to push to the next one.
 
 # Chinese-targeted features
 
-**Reading**: Unlike languages such as Spanish, Chinese words doesn't indicate pronunciation. So besides the classic Meaning and Writing, Reading is tested too, by having the user type pinyin.
+**Reading**: Chinese characters don't tell you how they're pronounced, so alongside Meaning and Writing, Reading is tested by typing pinyin.
 
 **Practice Handwriting**: Some characters are very complex to learn how to handwrite (建筑), others are easy and worth the trouble (水). A per-word toggle marks which ones should be written with strokes rather than pinyin. It's a visual cue only — nothing is enforced, and you type with the device keyboard, so you need a Chinese keyboard installed.
 
-**Fuzzy Pinyin**: Makes Reading tests more lenient (the second and third tones are combined). Toggable in the settings.
+**Fuzzy pinyin**: optional leniency on tones for Reading tests.
 
 # Settings
 
