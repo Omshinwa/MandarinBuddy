@@ -5,7 +5,6 @@ Built for personal use. Currently hosted on `https://superanki-web.onrender.com/
 <img src="docs/chat.webp" alt="Chat" height="450"/>
 <img src="docs/review.webp" alt="Review" height="450"/>
 <img src="docs/words.webp" alt="Words" height="450"/>
-<img src="docs/settings.webp" alt="Settings" height="450"/>
 </p>
 
 ## Contents
@@ -117,6 +116,8 @@ A few design choices meant to make the language learning process more pleasant a
 **Batch Size**: learning sessions are made more digestible by allowing the user to choose the size of the batches (in the settings). After finishing one batch, the user is met with a Breather Screen.
 
 **Breather screen**: each batch ends on a congratulation screen (confetti and fireworks). It's a checkpoint as much as a reward — quitting mid-card loses that card's grade, so there's always a reason to push to the next one.
+
+<br clear="both" />
 
 # Chinese-targeted features
 
