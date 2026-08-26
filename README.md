@@ -18,7 +18,6 @@ Built for personal use. Currently hosted on [mandarinbuddy-web.onrender.com](htt
 - [Game-ification](#game-ification)
 - [Chinese-targeted features](#chinese-targeted-features)
 - [Settings](#settings)
-- [License](#license)
 
 # Tech stack
 
