@@ -54,7 +54,7 @@ export default function App() {
             <Tab.Screen
               name="Review"
               component={ReviewScreen}
-              options={{ tabBarIcon: icon("🎴"), title: "Review", headerShown: false }}
+              options={{ tabBarIcon: icon("🔁"), title: "Review", headerShown: false }}
             />
             <Tab.Screen
               name="Words"

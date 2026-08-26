@@ -1,13 +1,3 @@
-# MandarinBuddy — Features
-
-## 🗣️ Voice
-
-- **TTS**: Google Translate's public Mandarin voice (`translate_tts`), **proxied through the server** at `/api/tts` (browsers block the cross-site load; the server fetches and streams `audio/mpeg` back, cached 24h). Same path on phone and web.
-  - ≤200 chars (endpoint limit); longer text falls back to the device voice (`expo-speech`, zh-CN). Native also falls back if playback hasn't started after 2.5s.
-  - Plays through the iPhone silent switch (`playsInSilentMode`).
-- **Auto-read** (📢 toggle, persisted): every completed AI reply is spoken; emphasis markers stripped first.
-- **Dictation** (🎤): free Web Speech API (`zh-CN`), transcript fills the input live; renders only where the API exists (desktop Chrome/Edge — not iOS/WebKit).
-
 ## 🧠 SRS — one card, one clock, weighted facets
 
 - **One schedule per word** (Anki-style: interval × ease, grades Forgot/Hard/Okay/Easy with next-interval previews on the buttons; leech suspension after 8 lapses, reactivatable).
@@ -33,3 +23,9 @@ All tuning constants are in `shared/src/srs.ts` (`TUNING`). Grades:
 | `reviewed_easy`       | classic review "Easy"                       | interval × ease × 1.3 (min 4d), ease +0.15              |
 | `conversation_used`   | you typed a dictionary word in conversation | small bump on reading+writing (once/word/day)           |
 | `conversation_missed` | you tapped a gloss on a word the AI used    | meaning: interval halved, due now                       |
+
+# chinese specific
+
+The app is chinese specific.
+Contrary to some language (like Spanish), pronounciation isn't obvious just from seeing a character, so practicing Reading is important and its own aspect.
+There's the option "Fuzzy pinyin", this makes reading tests more lenient (the second and third tones are combined).
