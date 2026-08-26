@@ -1,16 +1,18 @@
 # Render Blueprint — https://render.com/docs/blueprint-spec
-# Deploys both halves of SuperAnki v2:
-#   - superanki-server: the Hono API (server/)
-#   - superanki-web:    the Expo web build served as a static site (app/)
+# Deploys both halves of MandarinBuddy v2:
+#   - mandarinbuddy-server: the Hono API (server/)
+#   - mandarinbuddy-web:    the Expo web build served as a static site (app/)
 # Render clones the whole repo, so the server's imports from ../shared resolve.
 #
 # To use: push this repo to GitHub, then in Render → New → Blueprint, pick the
-# repo. Render reads this file and creates both services. Fill in the two secret
-# env vars (marked sync:false) on the server when prompted; the web app's API
-# URL is wired to the server automatically.
+# repo. Render reads this file and creates both services and prompts for every
+# env var marked `sync: false` — the server's MONGODB_URI and DEEPSEEK_API_KEY,
+# the optional APP_PASSWORD, and the web app's EXPO_PUBLIC_API_URL, which is the
+# server's own public URL (Render doesn't know it until the server is created,
+# so paste it in and redeploy the web service if it wasn't available yet).
 services:
   - type: web
-    name: superanki-server
+    name: mandarinbuddy-server
     runtime: node
     plan: free
     rootDir: server
@@ -26,21 +28,34 @@ services:
       # DeepSeek API key for the chat/tutor. Set this in the Render dashboard.
       - key: DEEPSEEK_API_KEY
         sync: false
+      # Optional shared password gating every data-changing request. Set it to
+      # lock the instance down to yourself; leave it blank for an open demo, and
+      # the gate disables itself. Prompted at blueprint creation, never committed.
+      - key: APP_PASSWORD
+        sync: false
 
   - type: web
-    name: superanki-web
+    name: mandarinbuddy-web
     runtime: static
     rootDir: app
     buildCommand: npm install && npm run export:web
     staticPublishPath: dist
     autoDeploy: true
     envVars:
-      # The server's PUBLIC URL, baked into the web bundle at build time.
-      # NOTE: don't use `fromService`/`host` here — for a web service that
-      # resolves to the INTERNAL name (`superanki-server`), which a browser
-      # can't reach. Set the full public https URL explicitly.
+      # The server's PUBLIC URL (e.g. https://mandarinbuddy-server.onrender.com),
+      # baked into the web bundle at build time. `sync: false` means Render asks
+      # for it when the blueprint is created, rather than hardcoding a hostname
+      # here — necessary because Render appends a suffix (`-05mt`) whenever the
+      # subdomain is already taken, so the real URL isn't known until the server
+      # service exists. Create the server first, copy its URL, paste it here.
+      #
+      # NOTE: don't use `fromService`/`host` instead — for a web service that
+      # resolves to the INTERNAL name (`mandarinbuddy-server`), which a browser
+      # can't reach. It has to be the full public https URL.
+      #
+      # Build-time, so changing it later needs a manual redeploy of this service.
       - key: EXPO_PUBLIC_API_URL
-        value: https://superanki-server.onrender.com
+        sync: false
     # NOTE: no `routes` rewrite here. A `/* -> /index.html` rewrite on this
     # static site returns an empty (0-byte) body for the root and every
     # rewritten path, which renders as a blank page. The app has no URL-based
