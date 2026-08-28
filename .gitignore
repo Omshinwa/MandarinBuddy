@@ -4,6 +4,7 @@ node_modules/
 .expo/
 dist/
 *.log
-notes.md
+notes/
 .prettierignore
 .prettierrc
+notes.md

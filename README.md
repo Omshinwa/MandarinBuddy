@@ -1,5 +1,5 @@
 MandarinBuddy is a Chinese learning app for iOS and web: spaced-repetition flashcards with an AI tutor.
-Built for personal use. Currently hosted on [mandarinbuddy-web.onrender.com](https://mandarinbuddy-web.onrender.com/) but is password protected.
+Built for personal use. Currently hosted on [mandarinbuddy-web.onrender.com](https://mandarinbuddy-web.onrender.com/) but is password protected. It can takes a few seconds for the server to wake up because it's on free hosting.
 
 <p align="center">
 <img src="docs/chat.webp" alt="Chat" height="450"/>

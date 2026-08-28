@@ -114,9 +114,17 @@ function IconButton({
   );
 }
 
+// Why the thread is empty. The mount-time history request tells us: it is in
+// flight from the moment the screen mounts, so "waking" covers the whole wait —
+// a warm server passes through it in milliseconds, a cold-starting free-tier
+// host sits in it for the best part of a minute.
+export type EmptyStatus = "waking" | "empty" | "offline";
+
 interface Props {
   placeholder: string;
-  emptyHint: string;
+  // A function of the status so the screen owns all the copy; it returns a
+  // ReactNode so it can mix in tappable spans (e.g. a link).
+  emptyHint: (status: EmptyStatus) => React.ReactNode;
   gloss?: GlossConfig;
   onWordAdded?: () => void;
   enableReview?: boolean;
@@ -128,6 +136,7 @@ export function ChatThread({ placeholder, emptyHint, gloss, onWordAdded, enableR
   const [items, setItems] = useState<Item[]>([]);
   const [input, setInput] = useState("");
   const [busy, setBusy] = useState(false);
+  const [emptyStatus, setEmptyStatus] = useState<EmptyStatus>("waking");
   const [reviewing, setReviewing] = useState(false);
   const [autoSpeak, setAutoSpeak] = useAutoSpeak();
   const [userLanguage] = useUserLanguage();
@@ -188,13 +197,14 @@ export function ChatThread({ placeholder, emptyHint, gloss, onWordAdded, enableR
   useEffect(() => {
     api
       .chatHistory()
-      .then((msgs) =>
+      .then((msgs) => {
         setItems(
           msgs.map((m) => ({ id: newId(), kind: "msg", role: m.role, content: m.content })),
-        ),
-      )
+        );
+        setEmptyStatus("empty");
+      })
       .catch(() => {
-        // history is a nice-to-have; the thread still works without it
+        setEmptyStatus("offline");
       });
   }, []);
 
@@ -400,7 +410,7 @@ export function ChatThread({ placeholder, emptyHint, gloss, onWordAdded, enableR
         </>
       )}
       {items.length === 0 && (
-        <Text style={[styles.hint, { color: t.subtext }]}>{emptyHint}</Text>
+        <Text style={[styles.hint, { color: t.subtext }]}>{emptyHint(emptyStatus)}</Text>
       )}
       <FlatList
         ref={listRef}

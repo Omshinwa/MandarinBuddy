@@ -1,7 +1,10 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { Linking, Text } from "react-native";
 import { isGlossable, type Word } from "../../../shared/src";
-import { ChatThread } from "../components/ChatThread";
+import { ChatThread, type EmptyStatus } from "../components/ChatThread";
 import { api } from "../lib/api";
+
+const REPO_URL = "https://github.com/Omshinwa/MandarinBuddy";
 
 // The one place to talk to the AI: it acts as a tutor when you ask about words
 // and as a conversation partner when you chat in Chinese. Dictionary words in AI
@@ -33,9 +36,26 @@ export function ChatScreen() {
       // Short enough to stay on one line — a wrapped placeholder makes the box
       // two rows tall on a phone and pushes the buttons out of the bar.
       placeholder="Ask or chat in 中文…"
-      emptyHint={
-        "Your Chinese tutor & chat partner 🇨🇳\n\nAsk about anything, or just chat in Chinese to practice — the AI weaves in your vocabulary. Tap a highlighted word if you forget it.\n\nTap “Start a review session” to drill your due words, or “Try and translate a sentence” for a sentence to put into Chinese."
-      }
+      // The status line changes with why the thread is empty; the repo link
+      // sits under every one of them.
+      emptyHint={(status: EmptyStatus) => (
+        <>
+          {status === "waking" && (
+            <>The server is waking up (free hosting), this can take a few seconds.{"\n\n"}</>
+          )}
+          {status === "empty" && <>The chat is empty!{"\n\n"}</>}
+          {status === "offline" && (
+            <>Can't reach the server — it may be down.{"\n\n"}</>
+          )}
+          Github repo:{" "}
+          <Text
+            style={{ textDecorationLine: "underline" }}
+            onPress={() => Linking.openURL(REPO_URL)}
+          >
+            {REPO_URL}
+          </Text>
+        </>
+      )}
       gloss={{ words: glossWords, onReveal }}
       onWordAdded={loadWords}
     />
