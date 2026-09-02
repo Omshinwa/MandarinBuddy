@@ -176,7 +176,7 @@ async function streamTurn(
     stream: true,
     max_tokens: 4096,
     // variance for the model prediction
-    temperature: 1.2,
+    temperature: 1.0,
   });
 
   let text = "";

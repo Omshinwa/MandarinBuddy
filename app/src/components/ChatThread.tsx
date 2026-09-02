@@ -74,9 +74,8 @@ interface GlossConfig {
 // How tall the message box may grow before it starts scrolling instead.
 const INPUT_MAX_HEIGHT = 120;
 
-// What the "translate a sentence" banner types on the user's behalf. It's a
-// plain message, not a server-side mode: the model handles it like any other
-// request, and it stays in the history so the marking turn has the context.
+// What the "translate a sentence" banner types on the user's behalf.
+// plain message
 const TRANSLATE_REQUEST =
   "Give me an English sentence that I'll translate to Chinese, don't give me hints for the words I'm supposed to learn.";
 

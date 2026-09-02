@@ -81,6 +81,12 @@ Three main tabs: Chat, Review, Words.
 
 # Run it
 
+### Prerequisites
+
+You need a **MongoDB URI** for storage and a **DeepSeek API key** for the Chat tab. Both go in `server/.env` as `MONGODB_URI` and `DEEPSEEK_API_KEY` — see [`server/.env.example`](server/.env.example).
+
+### Commands
+
 **Server** (terminal 1):
 
 ```sh
@@ -88,9 +94,6 @@ cd server
 npm install
 npm run dev          # http://localhost:6767
 ```
-
-`server/.env` needs `MONGODB_URI` and `DEEPSEEK_API_KEY`
-(required for the Chat tab; words/review work without it). (see server/.env.example)
 
 **App** (terminal 2):
 
@@ -133,3 +136,8 @@ A few design choices meant to make the language learning process more pleasant a
 <img src="docs/settings2.webp" alt="Settings" height="450"/>
 <img src="docs/settings3.webp" alt="Settings" height="450"/>
 </p>
+
+# How this was built
+
+Written with heavy LLM assistance (Claude Code). I designed the product: the UI/UX, the SRS scheduling, the three-aspect model and the chat-deck feedback loop - and rewrote and cleaned the code, it struggled with the UI especially making the web experience match the mobile one, and it tended to
+over-complicate the schemas.

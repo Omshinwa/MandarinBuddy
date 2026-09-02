@@ -15,7 +15,10 @@ export function ChatScreen() {
   const missedThisSession = useRef(new Set<string>());
 
   const loadWords = useCallback(() => {
-    api.listWords().then(setWords).catch(() => {});
+    api
+      .listWords()
+      .then(setWords)
+      .catch(() => {});
   }, []);
 
   useEffect(loadWords, [loadWords]);
@@ -41,12 +44,10 @@ export function ChatScreen() {
       emptyHint={(status: EmptyStatus) => (
         <>
           {status === "waking" && (
-            <>The server is waking up (free hosting), this can take a few seconds.{"\n\n"}</>
+            <>The server is waking up (free hosting), this can take up to a minute.{"\n\n"}</>
           )}
-          {status === "empty" && <>The chat is empty!{"\n\n"}</>}
-          {status === "offline" && (
-            <>Can't reach the server — it may be down.{"\n\n"}</>
-          )}
+          {status === "empty" && <>The chat is empty! 🇨🇳{"\n\n"}</>}
+          {status === "offline" && <>Can't reach the server — it may be down.{"\n\n"}</>}
           Github repo:{" "}
           <Text
             style={{ textDecorationLine: "underline" }}
