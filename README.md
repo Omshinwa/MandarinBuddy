@@ -30,7 +30,7 @@ One TypeScript codebase:
 - `app/` — Expo (React Native). The iPhone app **and** the website.
 - `server/` — small Hono API: words CRUD, SRS review grading, Deepseek chat proxy (SSE).
 - `shared/` — types and tools used by both.
-- `old/` — old 2018 version of the project in pure HTML and JS, kept only for legacy reasons
+- `old/` — old 2018 version of the project, pure HTML and JS, kept for legacy reasons
 
 Words and chat logs live in the same MongoDB (`words` and `chats` collections).
 
@@ -43,9 +43,7 @@ Three main tabs: Chat, Review, Words.
 <img src="docs/chat.webp" alt="Chat" height="450" align="left" />
 <img src="docs/chat2.webp" alt="Chat" height="450" align="left" />
 
-**AI tutor**: chats with you and can look up or create flashcards on the fly. DeepSeek (`deepseek-chat`, OpenAI-compatible API), streamed over **SSE**.
-
-**Deck-aware**: your own vocabulary is fed to the model so it steers conversation toward the words you're learning.
+**AI tutor**: chats with you and can look up or create flashcards on the fly. It can steer the conversation toward the words you're learning. DeepSeek (`deepseek-chat`, OpenAI-compatible API), streamed over **SSE**.
 
 **Chat feeds the SRS**: known words are highlighted — tap one for its definition (marks it forgotten); use one correctly yourself and it marks as remembered.
 
@@ -60,11 +58,9 @@ Three main tabs: Chat, Review, Words.
 
 **Three Aspects**: for each word, Meaning, Reading and Writing.
 
-**Review**: due words, scheduled by SRS. Two modes: **Direct typed input** or **Flip the card** (this is set per aspect in the Settings). There's also the option to **Both**, where a word starts as a _flip card_ then switches to _typed input_ once it's familiar enough.
+**Review**: due words, scheduled by SRS. Two modes: **Direct typed input** or **Flip the card**.
 
-**Auto-read**: words are read by default using Google Translate's public voice, proxied through the server at `/api/tts`. Chat messages are also read this way. Falls back to the device voice (`expo-speech`).
-
-**Scaffold learning**: young cards come with training wheels — extra hints that drop away as the card matures.
+**Auto-read**: words are read by default.
 
 <br clear="both" />
 
