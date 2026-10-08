@@ -118,9 +118,11 @@ function mulberry32(seed: number) {
 
 const VOCAB_LIMIT = 500;
 
-// Weak = due (or overdue), or still young (short interval).
+// Weak = meaning due (or overdue), or still young (short interval). Meaning
+// because the chat is about using words — and the server doesn't know which
+// other facets the user has switched off.
 function isWeak(w: WordDoc, nowIso: string): boolean {
-  return w.srs.due <= nowIso || w.srs.intervalDays < 7;
+  return w.facets.meaning.due <= nowIso || w.facets.meaning.intervalDays < 7;
 }
 
 // Pinyin and full meaning are omitted on purpose — the model reconstructs them,
@@ -138,7 +140,7 @@ export function buildVocabBlock(all: WordDoc[], now: Date): string {
   // Most-overdue weak words first so truncation keeps the ones that matter.
   const weak = all
     .filter((w) => isWeak(w, nowIso))
-    .sort((a, b) => a.srs.due.localeCompare(b.srs.due));
+    .sort((a, b) => a.facets.meaning.due.localeCompare(b.facets.meaning.due));
   const rest = all.filter((w) => !isWeak(w, nowIso));
 
   // Mature words only get sampled when the deck overflows the limit; keep the

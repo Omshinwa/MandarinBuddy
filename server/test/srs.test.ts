@@ -2,17 +2,20 @@ import { describe, expect, it } from "vitest";
 import {
   applyGrade,
   type Facet,
-  type FacetState,
+  FACETS,
   isDue,
+  isFacetUnlocked,
   isLeechMilestone,
   isScaffolded,
   lenientVerdict,
   newSrs,
   normalizeText,
+  reviewDayStart,
   type Srs,
   TUNING,
+  type Word,
 } from "../../shared/src";
-import { pickFacet, recordFacetAnswer } from "../src/facets";
+import { buildQueue, migrateFacets } from "../src/facets";
 
 const NOW = new Date("2026-07-11T12:00:00.000Z");
 const DAY_MS = 24 * 60 * 60 * 1000;
@@ -160,91 +163,181 @@ describe("newSrs / isDue", () => {
   });
 });
 
-const newFacets = (): Record<Facet, FacetState> => ({
-  meaning: { strength: 0, asked: 0 },
-  reading: { strength: 0, asked: 0 },
-  writing: { strength: 0, asked: 0 },
+const HOUR_MS = 60 * 60 * 1000;
+const iso = (offsetDays: number) => new Date(NOW.getTime() + offsetDays * DAY_MS).toISOString();
+
+const wordWith = (
+  facets: Partial<Record<Facet, Partial<Srs>>>,
+  fields: Partial<Word> = {},
+): Word => ({
+  _id: fields._id ?? "w",
+  chinese: "我",
+  pinyin: "wǒ",
+  english: "I; me",
+  comments: "",
+  learn_writing: false,
+  ...fields,
+  facets: {
+    meaning: srsWith(facets.meaning ?? {}),
+    reading: srsWith(facets.reading ?? {}),
+    writing: srsWith(facets.writing ?? {}),
+  },
 });
 
-const facetsWith = (o: Partial<Record<Facet, Partial<FacetState>>>): Record<Facet, FacetState> => {
-  const base = newFacets();
-  for (const d of ["meaning", "reading", "writing"] as Facet[]) {
-    base[d] = { ...base[d], ...o[d] };
-  }
-  return base;
-};
+// Started facets, so the unlock gate stays out of the way unless a test wants it.
+const started = { lastReviewed: iso(-10) };
+const queue = (words: Word[], o: Partial<Parameters<typeof buildQueue>[1]> = {}) =>
+  buildQueue(words, {
+    now: NOW,
+    dayStart: new Date(NOW.getTime() - 8 * HOUR_MS),
+    enabled: FACETS,
+    batchSize: 15,
+    ...o,
+  });
 
-describe("pickFacet / recordFacetAnswer", () => {
-  it("asks the weakest facet first", () => {
-    const facets = facetsWith({
-      meaning: { strength: 4 },
-      reading: { strength: 2 },
-      writing: { strength: 0 },
+describe("isFacetUnlocked", () => {
+  it("meaning is always open; reading and writing wait for meaning to hold", () => {
+    const fresh = wordWith({});
+    expect(isFacetUnlocked(fresh, "meaning")).toBe(true);
+    expect(isFacetUnlocked(fresh, "reading")).toBe(false);
+    expect(isFacetUnlocked(wordWith({ meaning: { intervalDays: 6.3 } }), "writing")).toBe(false);
+    expect(isFacetUnlocked(wordWith({ meaning: { intervalDays: TUNING.unlockAfterDays } }), "writing")).toBe(true);
+  });
+
+  it("a facet reviewed once stays unlocked even after meaning lapses", () => {
+    const lapsed = wordWith({ meaning: { intervalDays: 0 }, reading: started });
+    expect(isFacetUnlocked(lapsed, "reading")).toBe(true);
+    expect(isFacetUnlocked(lapsed, "writing")).toBe(false);
+  });
+
+  it("without meaning to gate on, everything is open", () => {
+    expect(isFacetUnlocked(wordWith({}), "reading", false)).toBe(true);
+  });
+});
+
+describe("reviewDayStart", () => {
+  const at = (h: number) => new Date(2026, 6, 11, h, 30);
+  it("after the rollover hour, the day started this morning", () => {
+    expect(reviewDayStart(at(9))).toEqual(new Date(2026, 6, 11, TUNING.dayRolloverHour));
+  });
+  it("before it, a late night still belongs to the day before", () => {
+    expect(reviewDayStart(at(1))).toEqual(new Date(2026, 6, 10, TUNING.dayRolloverHour));
+  });
+});
+
+describe("buildQueue", () => {
+  it("serves one facet per word: the earliest due", () => {
+    const w = wordWith({
+      meaning: { ...started, due: iso(-1) },
+      reading: { ...started, due: iso(-3) },
+      writing: { ...started, due: iso(1) }, // not due
     });
-    expect(pickFacet(facets)).toBe("writing");
+    const q = queue([w]);
+    expect(q).toHaveLength(1);
+    expect(q[0].facet).toBe("reading");
   });
 
-  it("breaks ties in FACETS order (fresh card starts with writing)", () => {
-    expect(pickFacet(newFacets())).toBe("writing");
-  });
-
-  it("restricts the pick to the allowed subset (facets set to None / unanswerable are skipped)", () => {
-    const facets = facetsWith({
-      meaning: { strength: 4 },
-      reading: { strength: 2 },
-      writing: { strength: 0 }, // weakest overall, but excluded below
+  it("buries a word's other facets once one was answered today", () => {
+    const w = wordWith({
+      meaning: { lastReviewed: iso(0), due: iso(1) }, // answered an hour ago, passed
+      reading: { ...started, due: iso(-2) },
     });
-    // With writing disabled, the next-weakest allowed facet wins.
-    expect(pickFacet(facets, ["meaning", "reading"])).toBe("reading");
-    // A single allowed facet is always the pick, however strong.
-    expect(pickFacet(facets, ["meaning"])).toBe("meaning");
+    expect(queue([w])).toHaveLength(0);
   });
 
-  it("weighted rotation: the weak facet is asked most, but strong ones still come up", () => {
-    // meaning/reading known (strength 1), writing new — the user's own scenario.
-    let facets = facetsWith({ meaning: { strength: 1 }, reading: { strength: 1 } });
-    const askedSeq: Facet[] = [];
-    for (let i = 0; i < 8; i++) {
-      const d = pickFacet(facets);
-      askedSeq.push(d);
-      facets = recordFacetAnswer(facets, d, "reviewed_hard"); // hard: strength holds, isolates rotation
-    }
-    const counts = askedSeq.reduce(
-      (acc, d) => ((acc[d] += 1), acc),
-      { meaning: 0, reading: 0, writing: 0 },
+  it("a facet forgotten today can still come back", () => {
+    const w = wordWith({
+      meaning: { ...started, due: iso(-2) },
+      reading: { lastReviewed: iso(0), due: iso(0) }, // forgot → due now
+    });
+    const q = queue([w]);
+    expect(q.map((i) => i.facet)).toEqual(["reading"]);
+  });
+
+  it("an answer from before today's start buries nothing", () => {
+    const w = wordWith({
+      meaning: { lastReviewed: iso(-1), due: iso(5) },
+      reading: { ...started, due: iso(-1) },
+    });
+    expect(queue([w]).map((i) => i.facet)).toEqual(["reading"]);
+  });
+
+  it("skips locked, suspended, disabled and unanswerable facets", () => {
+    const locked = wordWith({ meaning: { due: iso(1), intervalDays: 2 } }, { _id: "locked" });
+    const leech = wordWith(
+      { meaning: { ...started, suspended: true }, reading: { ...started, due: iso(1) }, writing: { ...started, due: iso(1) } },
+      { _id: "leech" },
     );
-    expect(counts.writing).toBeGreaterThan(counts.meaning); // favored...
-    expect(counts.meaning).toBeGreaterThan(0); // ...but not exclusive
-    expect(counts.reading).toBeGreaterThan(0);
+    expect(queue([locked, leech])).toHaveLength(0);
+
+    const w = wordWith({ meaning: started, reading: started, writing: started }, { pinyin: "" });
+    // reading needs pinyin; meaning and writing are switched off
+    expect(queue([w], { enabled: ["reading"] })).toHaveLength(0);
+    expect(queue([w], { enabled: ["reading", "writing"] }).map((i) => i.facet)).toEqual(["writing"]);
   });
 
-  it("a pass on the weak facet cedes airtime back to the others", () => {
-    let facets = facetsWith({ meaning: { strength: 2 }, reading: { strength: 2 } });
-    // Two easy passes on writing bring its strength to 4 — now the strongest.
-    facets = recordFacetAnswer(facets, "writing", "reviewed_easy");
-    facets = recordFacetAnswer(facets, "writing", "reviewed_easy");
-    expect(pickFacet(facets)).not.toBe("writing");
+  it("with meaning switched off, reading and writing aren't locked behind it", () => {
+    const fresh = wordWith({});
+    expect(queue([fresh])[0].facet).toBe("meaning");
+    expect(queue([fresh], { enabled: ["reading"] })[0].facet).toBe("reading");
   });
 
-  it("re-bases asked counters so they stay bounded", () => {
-    let facets = newFacets();
-    for (let i = 0; i < 30; i++) {
-      facets = recordFacetAnswer(facets, pickFacet(facets), "reviewed_hard");
+  it("keeps weakest-first order inside runs of one question type", () => {
+    const m = (id: string, intervalDays: number) =>
+      wordWith({ meaning: { intervalDays, due: iso(-1) }, reading: { due: iso(5) }, writing: { due: iso(5) } }, { _id: id });
+    const r = (id: string, intervalDays: number) =>
+      wordWith(
+        { meaning: { ...started, intervalDays: 30, due: iso(5) }, reading: { ...started, intervalDays, due: iso(-1) }, writing: { ...started, due: iso(5) } },
+        { _id: id },
+      );
+    const q = queue([m("m10", 10), r("r3", 3), m("m1", 1), r("r20", 20)], { batchSize: 1 });
+    // meaning holds the weakest card, so it leads; runs of 1 alternate.
+    expect(q.map((i) => i.word._id)).toEqual(["m1", "r3", "m10", "r20"]);
+  });
+});
+
+describe("migrateFacets", () => {
+  const legacy = (meaning: number, reading: number, writing: number) => ({
+    meaning: { strength: meaning, asked: 0 },
+    reading: { strength: reading, asked: 0 },
+    writing: { strength: writing, asked: 0 },
+  });
+  // Graded 10 days ago into a 40-day interval.
+  const old = srsWith({ intervalDays: 40, ease: 2.2, lapses: 3, due: iso(30) });
+
+  it("scales each facet's interval by its strength over the strongest", () => {
+    const f = migrateFacets(old, legacy(0, 8, 2), NOW);
+    expect(f.reading).toMatchObject({ intervalDays: 40, ease: 2.2, due: old.due });
+    expect(f.writing.intervalDays).toBe(10);
+    expect(f.writing.due).toBe(iso(0)); // graded 10 days ago + 10 days
+    expect(f.meaning).toMatchObject({ intervalDays: 0, ease: TUNING.startEase, due: NOW.toISOString() });
+  });
+
+  it("a scaled due date already in the past leaves the facet due", () => {
+    const f = migrateFacets(old, legacy(1, 8, 8), NOW);
+    expect(f.meaning.intervalDays).toBe(5);
+    expect(isDue(f.meaning, NOW)).toBe(true);
+  });
+
+  it("all strengths 0: every facet keeps the word's interval", () => {
+    const f = migrateFacets(old, legacy(0, 0, 0), NOW);
+    for (const d of FACETS) expect(f[d].intervalDays).toBe(40);
+    expect(migrateFacets(old, undefined, NOW).meaning.intervalDays).toBe(40);
+  });
+
+  it("resets lapses, but a leech stays a leech on every facet", () => {
+    const f = migrateFacets(old, legacy(0, 8, 2), NOW);
+    for (const d of FACETS) expect(f[d]).toMatchObject({ lapses: 0, suspended: false });
+    const leech = migrateFacets({ ...old, lapses: 8, suspended: true }, legacy(0, 8, 2), NOW);
+    for (const d of FACETS) expect(leech[d]).toMatchObject({ lapses: 8, suspended: true });
+  });
+
+  it("marks every facet as started, so existing words stay unlocked", () => {
+    const f = migrateFacets(old, legacy(0, 8, 2), NOW);
+    for (const d of FACETS) {
+      expect(f[d].lastReviewed).toBe(iso(-10));
+      expect(isFacetUnlocked({ facets: f }, d)).toBe(true);
     }
-    const min = Math.min(facets.meaning.asked, facets.reading.asked, facets.writing.asked);
-    expect(min).toBe(0); // always re-based to zero
-    expect(Math.max(facets.meaning.asked, facets.reading.asked, facets.writing.asked)).toBeLessThan(5);
-  });
-
-  it("forgot lowers strength so the failed facet returns as the pick", () => {
-    let facets = facetsWith({
-      meaning: { strength: 3 },
-      reading: { strength: 3 },
-      writing: { strength: 1 },
-    });
-    expect(pickFacet(facets)).toBe("writing");
-    facets = recordFacetAnswer(facets, "writing", "reviewed_forgot"); // 1 → 0, asked +1
-    expect(pickFacet(facets)).toBe("writing"); // still the weakest — drill it again
   });
 });
 

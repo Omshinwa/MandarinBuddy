@@ -7,6 +7,7 @@ import {
   type Facet,
   type Grade,
   type ReviewItem,
+  reviewDayStart,
   type Word,
   type WordInput,
 } from "../../../shared/src";
@@ -72,6 +73,9 @@ export const api = {
     const params = new URLSearchParams();
     if (batch) params.set("batch", String(batch));
     if (facets && facets.length) params.set("facets", facets.join(","));
+    // The server buries a word's other facets for the rest of the day once one
+    // is answered; only the device knows where the user's day starts.
+    params.set("dayStart", reviewDayStart(new Date()).toISOString());
     const qs = params.toString();
     return request<ReviewItem[]>(`/api/review/queue${qs ? `?${qs}` : ""}`);
   },

@@ -15,8 +15,18 @@ import {
   View,
 } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
-import { FACETS, normalizeText, type Word, type WordInput } from "../../../shared/src";
+import {
+  type Facet,
+  FACETS,
+  isFacetUnlocked,
+  normalizeText,
+  TUNING,
+  type Word,
+  type WordInput,
+} from "../../../shared/src";
 import { BUCKETS, intervalBucket } from "../lib/buckets";
+import { FACET_LABEL } from "../lib/labels";
+import { useTestMethods } from "../lib/settings";
 import { OutlineButton, PrimaryButton } from "../components/Button";
 import { TextStyling } from "../components/TextStyling";
 import { ApiError, api } from "../lib/api";
@@ -25,14 +35,30 @@ import { useTheme, type Theme } from "../theme";
 
 const DAY_MS = 24 * 60 * 60 * 1000;
 
-// A word is a leech when its card got suspended after too many lapses.
+// A word is a leech when any of its facets got suspended after too many lapses.
 function isLeech(w: Word): boolean {
-  return w.srs.suspended === true;
+  return FACETS.some((d) => w.facets[d].suspended === true);
 }
 
-function dueLabel(w: Word, now: Date): { text: string; due: boolean } {
-  if (isLeech(w)) return { text: "leech", due: false };
-  const days = (new Date(w.srs.due).getTime() - now.getTime()) / DAY_MS;
+// The facets you're actually tested on: not set to None, and unlocked.
+function activeFacets(w: Word, enabled: readonly Facet[]): Facet[] {
+  return enabled.filter((d) => isFacetUnlocked(w, d, enabled.includes("meaning")));
+}
+
+// A word is only as known as its weakest active facet.
+function wordInterval(w: Word, enabled: readonly Facet[]): number {
+  const active = activeFacets(w, enabled);
+  return active.length ? Math.min(...active.map((d) => w.facets[d].intervalDays)) : 0;
+}
+
+function dueLabel(w: Word, enabled: readonly Facet[], now: Date): { text: string; due: boolean } {
+  // A word comes due with its earliest active facet that isn't a leech.
+  const dues = activeFacets(w, enabled)
+    .filter((d) => !w.facets[d].suspended)
+    .map((d) => w.facets[d].due)
+    .sort();
+  if (dues.length === 0) return { text: isLeech(w) ? "leech" : "", due: false };
+  const days = (new Date(dues[0]).getTime() - now.getTime()) / DAY_MS;
   if (days <= 0) return { text: "due", due: true };
   if (days < 1) return { text: "today", due: false };
   return { text: `in ${Math.ceil(days)}d`, due: false };
@@ -46,6 +72,8 @@ export function WordsScreen() {
   const [bucketFilter, setBucketFilter] = useState<number | null>(null);
   const [leechOnly, setLeechOnly] = useState(false);
   const [sheet, setSheet] = useState<{ mode: "add" } | { mode: "edit"; word: Word } | null>(null);
+  const [methods] = useTestMethods();
+  const enabled = useMemo(() => FACETS.filter((d) => methods[d] !== "none"), [methods]);
 
   const load = useCallback(() => {
     api.listWords().then(setWords).catch(() => {});
@@ -60,7 +88,8 @@ export function WordsScreen() {
     const q = normalize_search(search.trim());
     return words.filter((w) => {
       if (leechOnly && !isLeech(w)) return false;
-      if (bucketFilter !== null && intervalBucket(w.srs.intervalDays) !== bucketFilter) return false;
+      if (bucketFilter !== null && intervalBucket(wordInterval(w, enabled)) !== bucketFilter)
+        return false;
       if (!q) return true;
       return (
         normalize_search(w.chinese).includes(q) ||
@@ -69,14 +98,14 @@ export function WordsScreen() {
         // || normalize_search(w.comments).includes(q)
       );
     });
-  }, [words, search, bucketFilter, leechOnly]);
+  }, [words, search, bucketFilter, leechOnly, enabled]);
 
   // The distribution lives under the chips as a bar per chip, so the graph is
   // the filter bar rather than a second copy of it.
   const counts = BUCKETS.map(() => 0);
   let leechCount = 0;
   for (const w of words) {
-    counts[intervalBucket(w.srs.intervalDays)]++;
+    counts[intervalBucket(wordInterval(w, enabled))]++;
     if (isLeech(w)) leechCount++;
   }
   // Bars are scaled against the biggest bucket, not the total — with a few
@@ -163,13 +192,13 @@ export function WordsScreen() {
           </Text>
         }
         renderItem={({ item }) => {
-          const { text, due } = dueLabel(item, now);
+          const { text, due } = dueLabel(item, enabled, now);
           return (
             <Pressable
               style={[styles.row, { backgroundColor: t.card, borderBottomColor: t.border }]}
               onPress={() => setSheet({ mode: "edit", word: item })}
             >
-              <View style={[styles.dot, { backgroundColor: BUCKETS[intervalBucket(item.srs.intervalDays)].color }]} />
+              <View style={[styles.dot, { backgroundColor: BUCKETS[intervalBucket(wordInterval(item, enabled))].color }]} />
               <View style={{ flex: 1 }}>
                 <Text style={{ fontSize: 22, color: t.text }}>
                   <TextStyling text={item.chinese} />
@@ -249,7 +278,19 @@ function Chip({
   );
 }
 
+function facetLine(w: Word, d: Facet, meaningGates: boolean): string {
+  if (!isFacetUnlocked(w, d, meaningGates))
+    return `${FACET_LABEL[d]} 🔒 unlocks when meaning reaches ${TUNING.unlockAfterDays}d`;
+  const s = w.facets[d];
+  const lapses = `${s.lapses} lapse${s.lapses === 1 ? "" : "s"}`;
+  return `${FACET_LABEL[d]} · every ${s.intervalDays}d · ease ${s.ease} · ${lapses}${
+    s.suspended ? " · 🐢 suspended" : ""
+  }`;
+}
+
 function WordSheet({ word, onClose, t }: { word: Word | null; onClose: (changed: boolean) => void; t: Theme }) {
+  const [methods] = useTestMethods();
+  const meaningGates = methods.meaning !== "none";
   const [chinese, setChinese] = useState(word?.chinese ?? "");
   const [pinyin, setPinyin] = useState(word?.pinyin ?? "");
   const [english, setEnglish] = useState(word?.english ?? "");
@@ -344,15 +385,16 @@ function WordSheet({ word, onClose, t }: { word: Word | null; onClose: (changed:
             </View>
 
             {word && (
+              // One schedule per facet — the lapse counts show which one you forget most.
               <View style={{ gap: 2 }}>
-                <Text style={{ color: isLeech(word) ? t.danger : t.subtext, fontSize: 12 }}>
-                  every {word.srs.intervalDays}d · ease {word.srs.ease} · {word.srs.lapses} lapses
-                  {isLeech(word) ? " · 🐢 suspended" : ""}
-                </Text>
-                {/* Per-facet mastery — drives which question type the review asks. */}
-                <Text style={{ color: t.subtext, fontSize: 12 }}>
-                  {FACETS.map((d) => `${d} ${word.facets?.[d]?.strength ?? 0}`).join(" · ")}
-                </Text>
+                {FACETS.map((d) => (
+                  <Text
+                    key={d}
+                    style={{ color: word.facets[d].suspended ? t.danger : t.subtext, fontSize: 12 }}
+                  >
+                    {facetLine(word, d, meaningGates)}
+                  </Text>
+                ))}
               </View>
             )}
 

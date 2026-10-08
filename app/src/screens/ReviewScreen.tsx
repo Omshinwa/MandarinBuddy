@@ -148,8 +148,11 @@ export function ReviewScreen() {
 
   const grade = useCallback(
     (item: ReviewItem, g: Grade) => {
-      const graded = applyGrade(item.word.srs, g, new Date());
-      const gradedItem: ReviewItem = { ...item, word: { ...item.word, srs: graded } };
+      const graded = applyGrade(item.word.facets[item.facet], g, new Date());
+      const gradedItem: ReviewItem = {
+        ...item,
+        word: { ...item.word, facets: { ...item.word.facets, [item.facet]: graded } },
+      };
       // Surface save failures instead of swallowing them: a dropped grade means
       // the card is still due on the next reload, which looks like the app
       // "forgot" your answer.
@@ -265,12 +268,14 @@ export function ReviewScreen() {
     );
 
   const item = queue[idx];
-  // Young cards get training wheels (pinyin, auto-played audio); mature cards
+  // The asked facet's own schedule — its maturity drives the aids and the method.
+  const srs = item.word.facets[item.facet];
+  // Young facets get training wheels (pinyin, auto-played audio); mature ones
   // must be answered from the characters alone.
-  const scaffold = isScaffolded(item.word.srs, scaffoldMaxDays);
+  const scaffold = isScaffolded(srs, scaffoldMaxDays);
   // A facet set to "both" resolves to flashcard or input based on how mature the
-  // card is; plain flashcard/input pass through unchanged.
-  const method = resolveMethod(methods[item.facet], item.word.srs.intervalDays, bothTransitionDays);
+  // facet is; plain flashcard/input pass through unchanged.
+  const method = resolveMethod(methods[item.facet], srs.intervalDays, bothTransitionDays);
   const view = facetView(item.word, item.facet, scaffold, fuzzy, leniencyMinLen(leniency));
   // Fuzzy only bites on a typed reading test — hide the toggle otherwise.
   const showFuzzyToggle = item.facet === "reading" && method === "input";
@@ -321,7 +326,7 @@ export function ReviewScreen() {
           view={view}
           word={item.word}
           facet={item.facet}
-          srs={item.word.srs}
+          srs={srs}
           scaffold={scaffold}
           onGrade={(g) => grade(item, g)}
           onRequeue={() => requeueUngraded(item)}

@@ -1,7 +1,7 @@
 import { serve } from "@hono/node-server";
 import { Hono } from "hono";
 import { cors } from "hono/cors";
-import { mongo, words } from "./db";
+import { migrateFacetSchedules, mongo, words } from "./db";
 import { chatRoute } from "./routes/chat";
 import { reviewRoute } from "./routes/review";
 import { ttsRoute } from "./routes/tts";
@@ -45,6 +45,8 @@ async function main() {
   await mongo.connect();
   const total = await words.countDocuments();
   console.log(`MongoDB connected — ${total} words`);
+  const migrated = await migrateFacetSchedules();
+  if (migrated) console.log(`Gave ${migrated} words one schedule per facet`);
   // Bind all interfaces (not just localhost) so hosts like Render can reach it.
   serve({ fetch: app.fetch, port, hostname: "0.0.0.0" });
   console.log(`API listening on port ${port}`);

@@ -25,7 +25,7 @@ export function ChatScreen() {
 
   // Only gloss words you might still forget — very high-interval, well-known
   // words would just clutter every message with highlights.
-  const glossWords = useMemo(() => words.filter((w) => isGlossable(w.srs)), [words]);
+  const glossWords = useMemo(() => words.filter((w) => isGlossable(w.facets.meaning)), [words]);
 
   const onReveal = useCallback((word: Word) => {
     if (missedThisSession.current.has(word._id)) return;

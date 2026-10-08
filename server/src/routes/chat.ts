@@ -51,9 +51,13 @@ async function creditUsedWords(message: string, now: Date): Promise<string[]> {
       { _id: w._id },
       {
         $set: {
-          // Nudges the card's schedule only — facets are untouched, since using a
-          // word in conversation isn't an answer to any specific question type.
-          srs: applyGrade(w.srs, "conversation_used", now),
+          // Typing the word yourself shows you know its meaning and can produce
+          // it, so meaning and (once started) writing get the nudge. It says
+          // nothing about tones, so reading gets none.
+          "facets.meaning": applyGrade(w.facets.meaning, "conversation_used", now),
+          ...(w.facets.writing.lastReviewed && {
+            "facets.writing": applyGrade(w.facets.writing, "conversation_used", now),
+          }),
           convCreditDate: today,
           updatedAt: now,
         },

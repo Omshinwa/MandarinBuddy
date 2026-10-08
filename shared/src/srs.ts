@@ -1,7 +1,6 @@
-import type { Grade, Srs } from "./word";
+import type { Facet, Grade, Srs, Word } from "./word";
 
-// Every tuning constant applyGrade leans on. Facet-picking has its own knobs
-// (FACET_TUNING) over in ./word.
+// Every tuning constant the scheduler leans on.
 export const TUNING = {
   startEase: 2.5,
   minEase: 1.3,
@@ -16,6 +15,8 @@ export const TUNING = {
   conversationMinDays: 1, // a word used in conversation is never due sooner than tomorrow
   missedDivisor: 2, // conversation_missed halves the interval
   leechThreshold: 8, // Anki default: after this many lapses a card is a "leech" and gets suspended
+  unlockAfterDays: 7, // reading/writing unlock once meaning's interval reaches this
+  dayRolloverHour: 4, // a review day starts at 4am local (like Anki), so late nights count as the day before
 };
 
 const DAY_MS = 24 * 60 * 60 * 1000;
@@ -106,6 +107,33 @@ export function applyGrade(srs: Srs, grade: Grade, now: Date): Srs {
 // ISO strings compare lexicographically in chronological order.
 export function isDue(srs: Srs, now: Date): boolean {
   return srs.due <= now.toISOString();
+}
+
+// A new word starts with meaning only; reading and writing unlock once meaning
+// has held for `unlockAfterDays`. A facet that has been reviewed once stays
+// unlocked even if meaning lapses later. `meaningGates` is false when meaning
+// can't be asked (set to None, or the card lacks the fields) — then nothing
+// would ever unlock the others, so they're open from the start.
+export function isFacetUnlocked(
+  word: Pick<Word, "facets">,
+  facet: Facet,
+  meaningGates = true,
+): boolean {
+  if (facet === "meaning" || !meaningGates) return true;
+  return (
+    word.facets[facet].lastReviewed !== undefined ||
+    word.facets.meaning.intervalDays >= TUNING.unlockAfterDays
+  );
+}
+
+// Start of the current review day in the device's local time: today at the
+// rollover hour, or yesterday's if it's earlier than that. Call it on the app —
+// the server runs in UTC and doesn't know the user's timezone.
+export function reviewDayStart(now: Date): Date {
+  const start = new Date(now);
+  start.setHours(TUNING.dayRolloverHour, 0, 0, 0);
+  if (start > now) start.setDate(start.getDate() - 1);
+  return start;
 }
 
 // Whether a card is still "young" and should be reviewed with scaffolding

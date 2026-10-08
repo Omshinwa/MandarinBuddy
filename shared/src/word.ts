@@ -19,29 +19,23 @@ export interface WordInput {
 // Scheduling logic lives in ./srs
 export interface Word extends WordInput {
   _id: string;
-  srs: Srs;
-  facets: Record<Facet, FacetState>;
+  facets: Record<Facet, Srs>; // one schedule per question type
   convCreditDate?: string; // once-per-day guard on conversation credit
   createdAt?: string;
 }
 
 export type Facet = "meaning" | "reading" | "writing";
 
-// One schedule per card. The card comes up when `due` passes
+// One schedule per facet. The facet comes up when `due` passes
 export interface Srs {
-  due: string; // ISO timestamp — when this card is next reviewed
+  due: string; // ISO timestamp — when this facet is next reviewed
   intervalDays: number; // current gap between reviews
   ease: number; // growth multiplier applied to the interval
   lapses: number; // times forgotten
   suspended?: boolean; // Anki "leech": too many lapses → pulled from reviews until reactivated
-}
-
-// One per question aspect (meaning, reading, writing)
-// Used to choose which question type to ask. `strength` rises with correct answers (max 8)
-// will pick the lowest `asked + 2·strength`
-export interface FacetState {
-  strength: number;
-  asked: number;
+  // ISO timestamp of the last review answer (conversation grades don't count).
+  // Set once = the facet has started, so it stays unlocked for good.
+  lastReviewed?: string;
 }
 
 // ---------------------------------------------------------------------------
@@ -66,10 +60,3 @@ export interface ReviewItem {
   word: Word;
   facet: Facet;
 }
-
-// How hard the question picker leans on the weakest facet. Higher = a weak
-// facet is asked more times before a stronger one gets a turn.
-export const FACET_TUNING = {
-  facetBias: 2,
-  strengthCap: 8, // ceiling on a facet's mastery level
-};

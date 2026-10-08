@@ -1,6 +1,6 @@
 import { Hono } from "hono";
 import { ObjectId } from "mongodb";
-import { type Facet, type FacetState, newSrs, type WordInput } from "../../../shared/src";
+import { type Facet, FACETS, newSrs, type Srs, type WordInput } from "../../../shared/src";
 import { WordDoc, serializeWord, words } from "../db";
 
 export const wordsRoute = new Hono();
@@ -32,8 +32,7 @@ wordsRoute.post("/", async (c) => {
     english: body.english!.trim(),
     comments: body.comments?.trim() ?? "",
     learn_writing: body.learn_writing ?? false,
-    srs: newSrs(now),
-    facets: newFacets(),
+    facets: newFacets(now),
     createdAt: now,
     updatedAt: now,
   };
@@ -56,14 +55,12 @@ wordsRoute.put("/:id", async (c) => {
   }
   if (typeof body.learn_writing === "boolean") $set.learn_writing = body.learn_writing;
   if (body.resetProgress) {
-    const now = new Date();
-    $set.srs = newSrs(now);
-    $set.facets = newFacets();
+    $set.facets = newFacets(new Date());
   } else if (body.unsuspend) {
-    // Reactivate a leech: clear the suspend flag. The card's lapse reset it to
-    // due-now, so it returns to the queue immediately.
+    // Reactivate a leech: clear the suspend flag on every facet. The lapse that
+    // suspended a facet reset it to due-now, so it returns to the queue immediately.
     // Mongo interprets the dot as a path into subdocuments
-    $set["srs.suspended"] = false;
+    for (const d of FACETS) $set[`facets.${d}.suspended`] = false;
   }
 
   const result = await words.findOneAndUpdate(
@@ -86,13 +83,10 @@ wordsRoute.delete("/:id", async (c) => {
 
 //#region helpers
 
-// A fresh card knows none of its three facets.
-function newFacets(): Record<Facet, FacetState> {
-  return {
-    meaning: { strength: 0, asked: 0 },
-    reading: { strength: 0, asked: 0 },
-    writing: { strength: 0, asked: 0 },
-  };
+// A fresh card knows none of its three facets. Reading and writing stay locked
+// until meaning has held (see isFacetUnlocked), then come up as new cards.
+function newFacets(now: Date): Record<Facet, Srs> {
+  return { meaning: newSrs(now), reading: newSrs(now), writing: newSrs(now) };
 }
 
 function validateInput(body: Partial<WordInput>): string | null {
