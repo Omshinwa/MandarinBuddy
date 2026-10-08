@@ -1,4 +1,4 @@
-import { Pressable, ScrollView, StyleSheet, Switch, Text, View } from "react-native";
+import { Pressable, ScrollView, StyleSheet, Text, View } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { FACETS } from "../../../shared/src";
 import { OutlineButton } from "../components/Button";
@@ -79,7 +79,10 @@ export function SettingsScreen({ onClose }: { onClose?: () => void }) {
   };
 
   return (
-    <ScrollView style={s.screen} contentContainerStyle={[s.content, { paddingTop: insets.top + 16 }]}>
+    <ScrollView
+      style={s.screen}
+      contentContainerStyle={[s.content, { paddingTop: insets.top + 16 }]}
+    >
       <View style={s.headerRow}>
         <Text style={s.title}>Settings</Text>
         {onClose && (
@@ -105,7 +108,7 @@ export function SettingsScreen({ onClose }: { onClose?: () => void }) {
 
       <Section
         title="Review batch size"
-        hint="At most how many cards are served in a row before switching exercise and getting a break. A shorter run just means fewer cards of that type were due."
+        hint="The last word isn't saved until you finish the batch."
         t={t}
       >
         <View style={s.chips}>
@@ -121,16 +124,29 @@ export function SettingsScreen({ onClose }: { onClose?: () => void }) {
         </View>
       </Section>
 
-      <Section title="Your language" t={t} hint="Recommended is English, other languages aren't as accurate">
+      <Section
+        title="Your language"
+        t={t}
+        hint="Recommended is English, other languages aren't as accurate."
+      >
         <View style={s.chips}>
           {LANGUAGE_OPTIONS.map((opt) => (
-            <Chip key={opt} label={opt} active={language === opt} onPress={() => setLanguage(opt)} t={t} />
+            <Chip
+              key={opt}
+              label={opt}
+              active={language === opt}
+              onPress={() => setLanguage(opt)}
+              t={t}
+            />
           ))}
         </View>
       </Section>
 
-      <Section title="Review test method" hint="FLASHCARD: shows the answer and you judge yourself. INPUT: you have to type part of the answer to pass. BOTH: flashcard while the card is young, then Input once it matures. NONE: this facet is never tested." t={t}>
-
+      <Section
+        title="Review test method"
+        hint="FLASHCARD: shows the answer and you judge yourself. INPUT: you have to type part of the answer to pass. BOTH: Flashcard while the card is young, then Input once it matures. NONE: this facet is never tested."
+        t={t}
+      >
         {FACETS.map((d) => (
           <View key={d} style={s.methodRow}>
             <Text style={s.label}>{FACET_LABEL[d]}</Text>
@@ -154,7 +170,7 @@ export function SettingsScreen({ onClose }: { onClose?: () => void }) {
       {anyBoth && (
         <Section
           title="Both — switch to Input at"
-          hint="A facet set to Both is a flashcard until the card's interval reaches this many days, then becomes a typed Input test."
+          hint="How many days for a Flashcard to turn into an Input test?"
           t={t}
         >
           <View style={s.chips}>
@@ -175,7 +191,7 @@ export function SettingsScreen({ onClose }: { onClose?: () => void }) {
       {anyInput && (
         <Section
           title="Input test leniency"
-          hint="How much of a typed answer must match. 1 = any matching part counts (most lenient); higher = that many characters required; Exact = the whole answer."
+          hint="Required number of characters to count as correct. 1 = any character in the answer is good enough. Exact = the whole answer."
           t={t}
         >
           <View style={s.chips}>
@@ -189,22 +205,26 @@ export function SettingsScreen({ onClose }: { onClose?: () => void }) {
               />
             ))}
           </View>
-          {/* Fuzzy only matters when reading is typed — tones are only checked on input. */}
-          {(methods.reading === "input" || methods.reading === "both") && (
-            <SwitchRow
-              label="Fuzzy pinyin"
-              hint="Accept the 2nd and 3rd tones interchangeably. Off = exact tones required."
-              value={fuzzy}
-              onValueChange={setFuzzy}
-              t={t}
-            />
-          )}
+        </Section>
+      )}
+
+      {/* Fuzzy only matters when reading is typed — tones are only checked on input. */}
+      {(methods.reading === "input" || methods.reading === "both") && (
+        <Section
+          title="Fuzzy pinyin"
+          hint="Accept the 2nd and 3rd tones interchangeably. Off = exact tones required."
+          t={t}
+        >
+          <View style={s.chips}>
+            <Chip label="ON" active={fuzzy} onPress={() => setFuzzy(true)} t={t} />
+            <Chip label="OFF" active={!fuzzy} onPress={() => setFuzzy(false)} t={t} />
+          </View>
         </Section>
       )}
 
       <Section
         title="Review scaffolding"
-        hint="Cards younger than this interval are reviewed with training wheels — pinyin shown and audio auto-played."
+        hint="Cards younger than this have pinyin shown and audio auto-played."
         t={t}
       >
         <Text style={s.label}>Scaffold day time</Text>
@@ -268,10 +288,15 @@ function Chip({
       onPress={onPress}
       style={[
         styles(t).chip,
-        { borderColor: active ? t.tint : t.border, backgroundColor: active ? t.tint : "transparent" },
+        {
+          borderColor: active ? t.tint : t.border,
+          backgroundColor: active ? t.tint : "transparent",
+        },
       ]}
     >
-      <Text style={{ color: active ? "#fff" : t.text, fontWeight: active ? "700" : "500" }}>{label}</Text>
+      <Text style={{ color: active ? "#fff" : t.text, fontWeight: active ? "700" : "500" }}>
+        {label}
+      </Text>
     </Pressable>
   );
 }
@@ -308,33 +333,8 @@ function Segmented<T extends string>({
   );
 }
 
-function SwitchRow({
-  label,
-  hint,
-  value,
-  onValueChange,
-  t,
-}: {
-  label: string;
-  hint?: string;
-  value: boolean;
-  onValueChange: (v: boolean) => void;
-  t: Theme;
-}) {
-  const s = styles(t);
-  return (
-    <View>
-      <View style={s.row}>
-        <Text style={s.label}>{label}</Text>
-        <Switch value={value} onValueChange={onValueChange} />
-      </View>
-      {hint && <Text style={s.hint}>{hint}</Text>}
-    </View>
-  );
-}
-
 // Every themed component here asks for the sheet on each render — Section, Chip,
-// Segmented, SwitchRow, and the screen itself — so build it once per theme
+// Segmented, and the screen itself — so build it once per theme
 // instead of once per call. There are only ever two Theme objects to key on.
 const sheets = new WeakMap<Theme, ReturnType<typeof createStyles>>();
 function styles(t: Theme) {
@@ -351,7 +351,13 @@ const createStyles = (t: Theme) =>
     title: { fontSize: 30, fontWeight: "800", color: t.text },
     done: { fontSize: 17, fontWeight: "700", color: t.tint },
     section: { gap: 8 },
-    sectionTitle: { fontSize: 15, fontWeight: "700", color: t.subtext, textTransform: "uppercase", letterSpacing: 0.5 },
+    sectionTitle: {
+      fontSize: 15,
+      fontWeight: "700",
+      color: t.subtext,
+      textTransform: "uppercase",
+      letterSpacing: 0.5,
+    },
     sectionHint: { fontSize: 13, color: t.subtext, marginTop: -2 },
     card: {
       backgroundColor: t.card,
@@ -361,9 +367,7 @@ const createStyles = (t: Theme) =>
       padding: 16,
       gap: 14,
     },
-    row: { flexDirection: "row", justifyContent: "space-between", alignItems: "center" },
     label: { fontSize: 16, color: t.text },
-    hint: { fontSize: 12.5, color: t.subtext, marginTop: 4 },
     chips: { flexDirection: "row", flexWrap: "wrap", gap: 8 },
     chip: { paddingVertical: 8, paddingHorizontal: 14, borderRadius: 20, borderWidth: 1.5 },
     methodRow: { gap: 8 },
