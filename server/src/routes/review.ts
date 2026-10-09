@@ -18,7 +18,7 @@ const HOUR_MS = 60 * 60 * 1000;
 // GET /api/review/queue
 // At most one item per due word — each facet has its own schedule, and
 // buildQueue picks which one to ask (and buries the rest once one was answered
-// today). Weakest facets come first, grouped into runs per question type.
+// today). Oldest-due facets come first, grouped into runs per question type.
 reviewRoute.get("/queue", async (c) => {
   const now = new Date();
   const all = await words.find({}).toArray();

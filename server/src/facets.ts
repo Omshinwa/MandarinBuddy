@@ -59,22 +59,20 @@ export function buildQueue(words: Word[], { now, dayStart, enabled, batchSize }:
     return [{ word: w, facet }];
   });
 
-  // Weakest (shortest-interval) first.
+  // Oldest due first. ISO strings compare lexicographically in chronological order.
   const srsOf = (item: ReviewItem) => item.word.facets[item.facet];
-  items.sort(
-    (a, b) => srsOf(a).intervalDays - srsOf(b).intervalDays || srsOf(a).due.localeCompare(srsOf(b).due),
-  );
+  items.sort((a, b) => srsOf(a).due.localeCompare(srsOf(b).due));
 
   // Regroup into runs of up to `batchSize` per question type so consecutive
   // cards share an input method — typing pinyin and typing hanzi need different
-  // keyboards, and switching per card is a pain. Weakest-first order is preserved
+  // keyboards, and switching per card is a pain. Oldest-due order is preserved
   // within each type. The types themselves are ordered by whichever holds the
-  // weakest (shortest-interval) card, so a session opens on your weakest facet
+  // oldest-due card, so a session opens on the card that has waited longest
   // instead of always leading with "meaning". Since `items` is already
-  // weakest-first, each pool's first item is its minimum interval.
+  // oldest-first, each pool's first item is its oldest.
   const pools = FACETS.map((d) => items.filter((item) => item.facet === d))
     .filter((pool) => pool.length > 0)
-    .sort((a, b) => srsOf(a[0]).intervalDays - srsOf(b[0]).intervalDays);
+    .sort((a, b) => srsOf(a[0]).due.localeCompare(srsOf(b[0]).due));
   const batched: ReviewItem[] = [];
   while (batched.length < items.length)
     for (const pool of pools) batched.push(...pool.splice(0, batchSize));

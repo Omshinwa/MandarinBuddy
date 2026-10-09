@@ -282,17 +282,18 @@ describe("buildQueue", () => {
     expect(queue([fresh], { enabled: ["reading"] })[0].facet).toBe("reading");
   });
 
-  it("keeps weakest-first order inside runs of one question type", () => {
-    const m = (id: string, intervalDays: number) =>
-      wordWith({ meaning: { intervalDays, due: iso(-1) }, reading: { due: iso(5) }, writing: { due: iso(5) } }, { _id: id });
-    const r = (id: string, intervalDays: number) =>
+  it("keeps oldest-due order inside runs of one question type", () => {
+    const m = (id: string, dueDays: number, intervalDays: number) =>
+      wordWith({ meaning: { intervalDays, due: iso(dueDays) }, reading: { due: iso(5) }, writing: { due: iso(5) } }, { _id: id });
+    const r = (id: string, dueDays: number, intervalDays: number) =>
       wordWith(
-        { meaning: { ...started, intervalDays: 30, due: iso(5) }, reading: { ...started, intervalDays, due: iso(-1) }, writing: { ...started, due: iso(5) } },
+        { meaning: { ...started, intervalDays: 30, due: iso(5) }, reading: { ...started, intervalDays, due: iso(dueDays) }, writing: { ...started, due: iso(5) } },
         { _id: id },
       );
-    const q = queue([m("m10", 10), r("r3", 3), m("m1", 1), r("r20", 20)], { batchSize: 1 });
-    // meaning holds the weakest card, so it leads; runs of 1 alternate.
-    expect(q.map((i) => i.word._id)).toEqual(["m1", "r3", "m10", "r20"]);
+    const q = queue([m("m2", -2, 1), r("r2", -1, 3), m("m1", -5, 30), r("r1", -3, 0)], { batchSize: 1 });
+    // meaning holds the oldest card, so it leads even though m1 has the longest
+    // interval; runs of 1 alternate.
+    expect(q.map((i) => i.word._id)).toEqual(["m1", "r1", "m2", "r2"]);
   });
 });
 
