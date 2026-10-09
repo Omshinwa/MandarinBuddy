@@ -16,6 +16,7 @@ import {
   type Grade,
   isScaffolded,
   type ReviewItem,
+  type Word,
 } from "../../../shared/src";
 import { PrimaryButton } from "../components/Button";
 import { MilestoneOverlay } from "../components/MilestoneOverlay";
@@ -146,6 +147,24 @@ export function ReviewScreen() {
     [idx, queue, reviewBatch],
   );
 
+  // Surface save failures instead of swallowing them: a dropped grade means
+  // the card is still due on the next reload, which looks like the app
+  // "forgot" your answer.
+  const save = useCallback((req: Promise<Word>) => {
+    req.then(
+      (word) => {
+        setSaveError(null);
+        setQueue((q) => q.map((it) => (it.word._id === word._id ? { ...it, word } : it)));
+      },
+      (err) =>
+        setSaveError(
+          `Couldn't save your last answer — ${
+            err instanceof Error ? err.message : "request failed"
+          }. Is the server (port 6767) running?`,
+        ),
+    );
+  }, []);
+
   const grade = useCallback(
     (item: ReviewItem, g: Grade) => {
       const graded = applyGrade(item.word.facets[item.facet], g, new Date());
@@ -153,21 +172,7 @@ export function ReviewScreen() {
         ...item,
         word: { ...item.word, facets: { ...item.word.facets, [item.facet]: graded } },
       };
-      // Surface save failures instead of swallowing them: a dropped grade means
-      // the card is still due on the next reload, which looks like the app
-      // "forgot" your answer.
-      api.grade(item.word._id, item.facet, g).then(
-        (word) => {
-          setSaveError(null);
-          setQueue((q) => q.map((it) => (it.word._id === word._id ? { ...it, word } : it)));
-        },
-        (err) =>
-          setSaveError(
-            `Couldn't save your last answer — ${
-              err instanceof Error ? err.message : "request failed"
-            }. Is the server (port 6767) running?`,
-          ),
-      );
+      save(api.grade(item.word._id, item.facet, g));
       const feedback =
         g === "reviewed_forgot"
           ? Haptics.NotificationFeedbackType.Error
@@ -183,19 +188,21 @@ export function ReviewScreen() {
       // into a leech (suspended) — then it leaves the session for good. 
       advance(gradedItem, g === "reviewed_forgot" && !graded.suspended, nextReviewed);
     },
-    [advance, reviewed],
+    [advance, reviewed, save],
   );
 
-  // "Actually I remember" on a given-up card: nothing is graded — the card keeps
-  // its SRS state (still due) and just goes back to the end of this session's
-  // queue for another try, so a mis-tap on Forgot doesn't cost a lapse. Nothing
-  // was answered, so the celebration's count doesn't move.
+  // "Actually I remember" on a given-up card: nothing is graded, so a mis-tap on
+  // Forgot doesn't cost a lapse. The card goes back to the end of this session's
+  // queue for another try, and its due date resets to now so that, if the
+  // session ends first, the next one doesn't open on it again. Nothing was
+  // answered, so the celebration's count doesn't move.
   const requeueUngraded = useCallback(
     (item: ReviewItem) => {
       Haptics.selectionAsync().catch(() => {});
+      save(api.requeue(item.word._id, item.facet));
       advance(item, true, reviewed);
     },
-    [advance, reviewed],
+    [advance, reviewed, save],
   );
 
   // A typed card in its answered state parks its "Continue" action here so the

@@ -13,3 +13,8 @@ export const FACET_LABEL: Record<Facet, string> = {
 export function facetBadge(d: Facet): string {
   return FACET_LABEL[d].toLowerCase();
 }
+
+// Just the emoji, for tight spots like the word list's "due 🧠✍️".
+export function facetEmoji(d: Facet): string {
+  return FACET_LABEL[d].split(" ")[0];
+}

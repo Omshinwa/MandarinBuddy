@@ -84,6 +84,11 @@ export const api = {
       method: "POST",
       body: JSON.stringify({ wordId, facet, grade }),
     }),
+  requeue: (wordId: string, facet: Facet) =>
+    request<Word>("/api/review/requeue", {
+      method: "POST",
+      body: JSON.stringify({ wordId, facet }),
+    }),
   chatHistory: () => request<ChatMessage[]>("/api/chat/history"),
   clearChat: () => request<{ ok: true }>("/api/chat/history", { method: "DELETE" }),
 };

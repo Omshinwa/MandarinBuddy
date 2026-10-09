@@ -77,8 +77,9 @@ export interface CardProps {
   srs: Srs; // the tested facet's state — used to preview next intervals
   scaffold: boolean;
   onGrade: (grade: Grade) => void;
-  // Sends the card back to the end of the session queue without grading it —
-  // the typed cards' "Actually I remember" escape hatch. Unused by flashcards.
+  // Sends the card back to the end of the session queue without grading it (its
+  // due date resets to now) — the typed cards' "Actually I remember" escape
+  // hatch. Unused by flashcards.
   onRequeue?: () => void;
   // Typed cards park their "Continue" here so the screen can fire it on a
   // tap-anywhere / Enter. Unused by flashcards.

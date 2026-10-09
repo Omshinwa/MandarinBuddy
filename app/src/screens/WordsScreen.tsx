@@ -18,6 +18,7 @@ import { useSafeAreaInsets } from "react-native-safe-area-context";
 import {
   type Facet,
   FACETS,
+  isDue,
   isFacetUnlocked,
   normalizeText,
   TUNING,
@@ -25,7 +26,7 @@ import {
   type WordInput,
 } from "../../../shared/src";
 import { BUCKETS, intervalBucket } from "../lib/buckets";
-import { FACET_LABEL } from "../lib/labels";
+import { FACET_LABEL, facetEmoji } from "../lib/labels";
 import { useTestMethods } from "../lib/settings";
 import { OutlineButton, PrimaryButton } from "../components/Button";
 import { TextStyling } from "../components/TextStyling";
@@ -52,14 +53,15 @@ function wordInterval(w: Word, enabled: readonly Facet[]): number {
 }
 
 function dueLabel(w: Word, enabled: readonly Facet[], now: Date): { text: string; due: boolean } {
-  // A word comes due with its earliest active facet that isn't a leech.
-  const dues = activeFacets(w, enabled)
-    .filter((d) => !w.facets[d].suspended)
-    .map((d) => w.facets[d].due)
-    .sort();
-  if (dues.length === 0) return { text: isLeech(w) ? "leech" : "", due: false };
-  const days = (new Date(dues[0]).getTime() - now.getTime()) / DAY_MS;
-  if (days <= 0) return { text: "due", due: true };
+  // Leeches aren't asked, so they neither come due nor set the countdown.
+  const facets = activeFacets(w, enabled).filter((d) => !w.facets[d].suspended);
+  if (facets.length === 0) return { text: isLeech(w) ? "leech" : "", due: false };
+  // Each facet has its own schedule, so name every one that's due by its emoji.
+  const dueNow = facets.filter((d) => isDue(w.facets[d], now));
+  if (dueNow.length) return { text: `due ${dueNow.map(facetEmoji).join("")}`, due: true };
+  // Otherwise the word comes due with its earliest facet.
+  const next = Math.min(...facets.map((d) => Date.parse(w.facets[d].due)));
+  const days = (next - now.getTime()) / DAY_MS;
   if (days < 1) return { text: "today", due: false };
   return { text: `in ${Math.ceil(days)}d`, due: false };
 }
@@ -280,7 +282,8 @@ function Chip({
 
 // One schedule per facet, as a table without borders: fixed-width columns keep
 // the numbers lined up whatever the label's width.
-function FacetTable({ word, meaningGates, t }: { word: Word; meaningGates: boolean; t: Theme }) {
+function FacetTable({ word, enabled, t }: { word: Word; enabled: readonly Facet[]; t: Theme }) {
+  const now = new Date();
   return (
     <View style={{ gap: 2 }}>
       <View style={styles.facetRow}>
@@ -294,15 +297,19 @@ function FacetTable({ word, meaningGates, t }: { word: Word; meaningGates: boole
       {FACETS.map((d) => {
         const s = word.facets[d];
         const color = s.suspended ? t.danger : t.subtext;
+        // Same rule as the list's "due": a facet set to None or suspended as a
+        // leech is never asked, so it isn't flagged.
+        const due = enabled.includes(d) && !s.suspended && isDue(s, now);
         return (
           <View key={d} style={styles.facetRow}>
             <Text style={[styles.facetLabel, { color }]}>{FACET_LABEL[d]}</Text>
-            {isFacetUnlocked(word, d, meaningGates) ? (
+            {isFacetUnlocked(word, d, enabled.includes("meaning")) ? (
               <>
                 <Text style={[styles.facetCell, { color }]}>{s.intervalDays}d</Text>
                 <Text style={[styles.facetCell, { color }]}>{s.ease}</Text>
                 <Text style={[styles.facetCell, { color }]}>{s.lapses}</Text>
                 {s.suspended && <Text style={{ color, fontSize: 12 }}>🐢 suspended</Text>}
+                {due && <Text style={{ color: t.danger, fontSize: 12 }}>due</Text>}
               </>
             ) : (
               <Text style={{ color, fontSize: 12 }}>🔒 unlocks when meaning reaches {TUNING.unlockAfterDays}d</Text>
@@ -316,7 +323,7 @@ function FacetTable({ word, meaningGates, t }: { word: Word; meaningGates: boole
 
 function WordSheet({ word, onClose, t }: { word: Word | null; onClose: (changed: boolean) => void; t: Theme }) {
   const [methods] = useTestMethods();
-  const meaningGates = methods.meaning !== "none";
+  const enabled = FACETS.filter((d) => methods[d] !== "none");
   const [chinese, setChinese] = useState(word?.chinese ?? "");
   const [pinyin, setPinyin] = useState(word?.pinyin ?? "");
   const [english, setEnglish] = useState(word?.english ?? "");
@@ -411,7 +418,7 @@ function WordSheet({ word, onClose, t }: { word: Word | null; onClose: (changed:
             </View>
 
             {/* One schedule per facet — the lapse counts show which one you forget most. */}
-            {word && <FacetTable word={word} meaningGates={meaningGates} t={t} />}
+            {word && <FacetTable word={word} enabled={enabled} t={t} />}
 
             {error && <Text style={{ color: t.danger }}>{error}</Text>}
 

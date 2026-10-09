@@ -69,3 +69,23 @@ reviewRoute.post("/grade", async (c) => {
   );
   return c.json(serializeWord(result!));
 });
+
+// POST /api/review/requeue  — body {wordId, facet}
+// "Actually I remember" on a given-up card: no grade, so interval, ease and
+// lapses stay as they were. Only `due` moves to now, which sends the facet to
+// the back of the oldest-first queue instead of leading the next session.
+reviewRoute.post("/requeue", async (c) => {
+  const body = (await c.req.json()) as { wordId?: string; facet?: Facet };
+  if (!body.wordId || !ObjectId.isValid(body.wordId)) return c.json({ error: "bad wordId" }, 400);
+  if (!body.facet || !FACETS.includes(body.facet))
+    return c.json({ error: "bad facet" }, 400);
+
+  const now = new Date();
+  const result = await words.findOneAndUpdate(
+    { _id: new ObjectId(body.wordId), [`facets.${body.facet}`]: { $exists: true } },
+    { $set: { [`facets.${body.facet}.due`]: now.toISOString(), updatedAt: now } },
+    { returnDocument: "after" },
+  );
+  if (!result) return c.json({ error: "not found" }, 404);
+  return c.json(serializeWord(result));
+});

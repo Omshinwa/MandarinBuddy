@@ -115,6 +115,8 @@ A few design choices meant to make the language learning process more pleasant a
 
 **Breather screen**: each batch ends on a congratulation screen (confetti and fireworks). It's a checkpoint as much as a reward — quitting mid-card loses that card's grade, so there's always a reason to push to the next one.
 
+**Oldest or weakest cards first?**: Reviews used to show the weakest cards first. But the experience got more frustrating: the weak cards kept coming back, so you got a lot of answers wrong. Showing the oldest due cards first, you get a lot of correct answers, sometimes from some very old words, so you're surprised and it feels like you're actually learning. We want this positive reinforcement feeling.
+
 <br clear="both" />
 
 # Chinese-targeted features

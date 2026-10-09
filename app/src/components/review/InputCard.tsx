@@ -186,7 +186,7 @@ function Result({
         onPress={() => onCommit(grade)}
       />
       {/* Take back the give-up: no grade is saved, the card just comes round
-          again later this session. */}
+          again later this session (its due date resets to now). */}
       {gaveUp && !!onRequeue && (
         <Pressable onPress={onRequeue}>
           <Text style={{ color: t.subtext }}>← Actually I remember</Text>
