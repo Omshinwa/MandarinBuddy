@@ -278,14 +278,40 @@ function Chip({
   );
 }
 
-function facetLine(w: Word, d: Facet, meaningGates: boolean): string {
-  if (!isFacetUnlocked(w, d, meaningGates))
-    return `${FACET_LABEL[d]} 🔒 unlocks when meaning reaches ${TUNING.unlockAfterDays}d`;
-  const s = w.facets[d];
-  const lapses = `${s.lapses} lapse${s.lapses === 1 ? "" : "s"}`;
-  return `${FACET_LABEL[d]} · every ${s.intervalDays}d · ease ${s.ease} · ${lapses}${
-    s.suspended ? " · 🐢 suspended" : ""
-  }`;
+// One schedule per facet, as a table without borders: fixed-width columns keep
+// the numbers lined up whatever the label's width.
+function FacetTable({ word, meaningGates, t }: { word: Word; meaningGates: boolean; t: Theme }) {
+  return (
+    <View style={{ gap: 2 }}>
+      <View style={styles.facetRow}>
+        <View style={styles.facetLabel} />
+        {["interval", "ease", "lapses"].map((h) => (
+          <Text key={h} style={[styles.facetCell, { color: t.subtext, fontSize: 11 }]}>
+            {h}
+          </Text>
+        ))}
+      </View>
+      {FACETS.map((d) => {
+        const s = word.facets[d];
+        const color = s.suspended ? t.danger : t.subtext;
+        return (
+          <View key={d} style={styles.facetRow}>
+            <Text style={[styles.facetLabel, { color }]}>{FACET_LABEL[d]}</Text>
+            {isFacetUnlocked(word, d, meaningGates) ? (
+              <>
+                <Text style={[styles.facetCell, { color }]}>{s.intervalDays}d</Text>
+                <Text style={[styles.facetCell, { color }]}>{s.ease}</Text>
+                <Text style={[styles.facetCell, { color }]}>{s.lapses}</Text>
+                {s.suspended && <Text style={{ color, fontSize: 12 }}>🐢 suspended</Text>}
+              </>
+            ) : (
+              <Text style={{ color, fontSize: 12 }}>🔒 unlocks when meaning reaches {TUNING.unlockAfterDays}d</Text>
+            )}
+          </View>
+        );
+      })}
+    </View>
+  );
 }
 
 function WordSheet({ word, onClose, t }: { word: Word | null; onClose: (changed: boolean) => void; t: Theme }) {
@@ -384,19 +410,8 @@ function WordSheet({ word, onClose, t }: { word: Word | null; onClose: (changed:
               <Switch value={learnWriting} onValueChange={setLearnWriting} />
             </View>
 
-            {word && (
-              // One schedule per facet — the lapse counts show which one you forget most.
-              <View style={{ gap: 2 }}>
-                {FACETS.map((d) => (
-                  <Text
-                    key={d}
-                    style={{ color: word.facets[d].suspended ? t.danger : t.subtext, fontSize: 12 }}
-                  >
-                    {facetLine(word, d, meaningGates)}
-                  </Text>
-                ))}
-              </View>
-            )}
+            {/* One schedule per facet — the lapse counts show which one you forget most. */}
+            {word && <FacetTable word={word} meaningGates={meaningGates} t={t} />}
 
             {error && <Text style={{ color: t.danger }}>{error}</Text>}
 
@@ -465,4 +480,7 @@ const styles = StyleSheet.create({
   sheet: { borderTopLeftRadius: 20, borderTopRightRadius: 20, maxHeight: "88%" },
   input: { borderRadius: 10, paddingHorizontal: 12, paddingVertical: 10, fontSize: 16 },
   switchRow: { flexDirection: "row", justifyContent: "space-between", alignItems: "center" },
+  facetRow: { flexDirection: "row", alignItems: "baseline" },
+  facetLabel: { width: 96, fontSize: 12 },
+  facetCell: { width: 64, fontSize: 12, fontVariant: ["tabular-nums"] },
 });
