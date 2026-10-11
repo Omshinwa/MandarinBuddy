@@ -171,17 +171,16 @@ export function useScaffoldMaxDays(): [number, (v: number) => void] {
   return [useStore(scaffoldMaxDaysStore), scaffoldMaxDaysStore.set];
 }
 
-// "Both" transition day: a facet set to Both is a flashcard while the card is
-// young and becomes a typed Input test once its interval reaches this many days.
-// Same UI-only nature as the scaffold cutoff; the server never reads it.
-export const DEFAULT_BOTH_TRANSITION_DAYS = 14;
-const bothTransitionDaysStore = numberStore(
-  "settings.bothTransitionDays",
-  DEFAULT_BOTH_TRANSITION_DAYS,
-);
-export function useBothTransitionDays(): [number, (v: number) => void] {
-  return [useStore(bothTransitionDaysStore), bothTransitionDaysStore.set];
-}
+// "Both" transition day, per facet: a facet set to Both is a flashcard while
+// the card is young and becomes a typed Input test once its interval reaches
+// this many days. Same UI-only nature as the scaffold cutoff; the server never
+// reads it. Older builds stored a single value for all facets — it seeds any
+// facet that hasn't been given its own yet.
+export const DEFAULT_BOTH_TRANSITION_DAYS: Record<Facet, number> = {
+  meaning: 14,
+  reading: 14,
+  writing: 14,
+};
 
 // Review batch size: the most same-type cards served back-to-back, so you're not
 // switching keyboards every card. Only the server reads it (passed on the queue
@@ -219,7 +218,7 @@ export function useUserLanguage(): [string, (v: string) => void] {
 //  - "flashcard": show the card, reveal the answer, self-grade (trust the user)
 //  - "input":     the user must type the answer, graded from how many tries
 //  - "both":      flashcard while the card is young, input once it matures — the
-//                 switch happens at the "Both transition day" interval
+//                 switch happens at that facet's "Both transition day" interval
 //  - "none":      this facet is never tested — cards are never queued for it
 // Defaults: meaning is shown, reading grows into a typed test, writing is typed.
 export type TestMethod = "flashcard" | "both" | "input" | "none";
@@ -229,27 +228,37 @@ export const DEFAULT_TEST_METHODS: Record<Facet, TestMethod> = {
   writing: "input",
 };
 
-const methodKey = (d: Facet) => `settings.testMethod.${d}`;
 const isMethod = (v: unknown): v is TestMethod =>
   v === "flashcard" || v === "input" || v === "both" || v === "none";
 
-// The three facets' methods share one reactive object. Per-facet storage
-// keys are kept for backward compatibility, but reads/writes go through the
-// store so the review screen and the settings screen stay in lock-step.
-function createMethodsStore() {
-  let value: Record<Facet, TestMethod> = { ...DEFAULT_TEST_METHODS };
+// A per-facet setting: the three facets share one reactive object, but each is
+// stored under its own `${prefix}.${facet}` key. `legacyKey` is an older
+// single value used for any facet that has no key of its own yet.
+function createFacetStore<T>(
+  prefix: string,
+  defaults: Record<Facet, T>,
+  decode: (raw: string | null) => T | undefined,
+  encode: (v: T) => string,
+  legacyKey?: string,
+) {
+  let value: Record<Facet, T> = { ...defaults };
   let hydrated = false;
   const listeners = new Set<Listener>();
   const emit = () => listeners.forEach((l) => l());
+  const key = (d: Facet) => `${prefix}.${d}`;
   const hydrate = () => {
     if (hydrated) return;
     hydrated = true;
-    Promise.all(FACETS.map((d) => AsyncStorage.getItem(methodKey(d)))).then((vals) => {
+    const keys = FACETS.map(key);
+    if (legacyKey) keys.push(legacyKey);
+    Promise.all(keys.map((k) => AsyncStorage.getItem(k))).then((vals) => {
+      const legacy = legacyKey ? decode(vals[FACETS.length]) : undefined;
       const next = { ...value };
       let changed = false;
       FACETS.forEach((d, i) => {
-        if (isMethod(vals[i])) {
-          next[d] = vals[i] as TestMethod;
+        const v = decode(vals[i]) ?? legacy;
+        if (v !== undefined) {
+          next[d] = v;
           changed = true;
         }
       });
@@ -261,9 +270,9 @@ function createMethodsStore() {
   };
   return {
     get: () => value,
-    setOne: (d: Facet, m: TestMethod) => {
-      value = { ...value, [d]: m };
-      AsyncStorage.setItem(methodKey(d), m).catch(() => {});
+    setOne: (d: Facet, v: T) => {
+      value = { ...value, [d]: v };
+      AsyncStorage.setItem(key(d), encode(v)).catch(() => {});
       emit();
     },
     subscribe: (l: Listener) => {
@@ -273,7 +282,24 @@ function createMethodsStore() {
     },
   };
 }
-const methodsStore = createMethodsStore();
+
+// The per-facet storage keys predate this store and are kept for backward
+// compatibility; reads/writes go through it so the review screen and the
+// settings screen stay in lock-step.
+const methodsStore = createFacetStore<TestMethod>(
+  "settings.testMethod",
+  DEFAULT_TEST_METHODS,
+  (r) => (isMethod(r) ? r : undefined),
+  (v) => v,
+);
+
+const transitionDaysStore = createFacetStore<number>(
+  "settings.bothTransitionDays",
+  DEFAULT_BOTH_TRANSITION_DAYS,
+  (r) => (r !== null && Number.isFinite(Number(r)) ? Number(r) : undefined),
+  String,
+  "settings.bothTransitionDays",
+);
 
 // All three facets' test methods. Used by the review screen (to pick how to show
 // a card) and the settings screen (to edit them).
@@ -283,6 +309,20 @@ export function useTestMethods(): [
 ] {
   const value = useSyncExternalStore(methodsStore.subscribe, methodsStore.get, methodsStore.get);
   return [value, methodsStore.setOne];
+}
+
+// Each facet's Both transition day. Read by the review screen (via
+// resolveMethod) and edited in settings.
+export function useBothTransitionDays(): [
+  Record<Facet, number>,
+  (d: Facet, days: number) => void,
+] {
+  const value = useSyncExternalStore(
+    transitionDaysStore.subscribe,
+    transitionDaysStore.get,
+    transitionDaysStore.get,
+  );
+  return [value, transitionDaysStore.setOne];
 }
 
 // Resolve a facet's configured method into the concrete card type to show. A

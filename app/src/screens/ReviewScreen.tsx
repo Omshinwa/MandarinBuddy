@@ -282,7 +282,7 @@ export function ReviewScreen() {
   const scaffold = isScaffolded(srs, scaffoldMaxDays);
   // A facet set to "both" resolves to flashcard or input based on how mature the
   // facet is; plain flashcard/input pass through unchanged.
-  const method = resolveMethod(methods[item.facet], srs.intervalDays, bothTransitionDays);
+  const method = resolveMethod(methods[item.facet], srs.intervalDays, bothTransitionDays[item.facet]);
   const view = facetView(item.word, item.facet, scaffold, fuzzy, leniencyMinLen(leniency));
   // Fuzzy only bites on a typed reading test — hide the toggle otherwise.
   const showFuzzyToggle = item.facet === "reading" && method === "input";

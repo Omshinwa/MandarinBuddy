@@ -1,3 +1,4 @@
+import { useState } from "react";
 import { Pressable, ScrollView, StyleSheet, Text, View } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { FACETS } from "../../../shared/src";
@@ -50,12 +51,12 @@ export function SettingsScreen({ onClose }: { onClose?: () => void }) {
   const [methods, setMethod] = useTestMethods();
   const [fuzzy, setFuzzy] = useFuzzyPinyin();
   const [scaffoldMaxDays, setScaffoldMaxDays] = useScaffoldMaxDays();
-  const [bothTransitionDays, setBothTransitionDays] = useBothTransitionDays();
+  const [bothTransitionDays, setBothTransitionDay] = useBothTransitionDays();
   const [leniency, setLeniency] = useInputLeniency();
   const [reviewBatch, setReviewBatch] = useReviewBatch();
   // "both" also produces typed input on mature cards, so leniency/fuzzy apply.
   const anyInput = FACETS.some((d) => methods[d] === "input" || methods[d] === "both");
-  const anyBoth = FACETS.some((d) => methods[d] === "both");
+  const bothFacets = FACETS.filter((d) => methods[d] === "both");
 
   // Push every setter back to its default. We set values (rather than clearing
   // AsyncStorage) so every subscriber updates immediately — clearing storage
@@ -73,7 +74,7 @@ export function SettingsScreen({ onClose }: { onClose?: () => void }) {
     FACETS.forEach((d) => setMethod(d, DEFAULT_TEST_METHODS[d]));
     setFuzzy(DEFAULT_FUZZY_PINYIN);
     setScaffoldMaxDays(DEFAULT_SCAFFOLD_MAX_DAYS);
-    setBothTransitionDays(DEFAULT_BOTH_TRANSITION_DAYS);
+    FACETS.forEach((d) => setBothTransitionDay(d, DEFAULT_BOTH_TRANSITION_DAYS[d]));
     setLeniency(DEFAULT_INPUT_LENIENCY);
     setReviewBatch(DEFAULT_REVIEW_BATCH);
   };
@@ -165,25 +166,25 @@ export function SettingsScreen({ onClose }: { onClose?: () => void }) {
         ))}
       </Section>
 
-      {/* Only relevant once a facet is Both — this is the interval at which it
-          flips from flashcard to typed input. */}
-      {anyBoth && (
+      {/* Only relevant once a facet is Both — each such facet has its own
+          interval at which it flips from flashcard to typed input. A dropdown
+          per facet keeps up to three of them to one line each. */}
+      {bothFacets.length > 0 && (
         <Section
           title="Both — switch to Input at"
           hint="How many days for a Flashcard to turn into an Input test?"
           t={t}
         >
-          <View style={s.chips}>
-            {SCAFFOLD_DAY_OPTIONS.map((d) => (
-              <Chip
-                key={d}
-                label={`${d}d`}
-                active={bothTransitionDays === d}
-                onPress={() => setBothTransitionDays(d)}
-                t={t}
-              />
-            ))}
-          </View>
+          {bothFacets.map((d) => (
+            <DayDropdown
+              key={d}
+              label={FACET_LABEL[d]}
+              value={bothTransitionDays[d]}
+              options={SCAFFOLD_DAY_OPTIONS}
+              onChange={(days) => setBothTransitionDay(d, days)}
+              t={t}
+            />
+          ))}
         </Section>
       )}
 
@@ -301,6 +302,56 @@ function Chip({
   );
 }
 
+// A labelled day picker that stays one line until tapped, then drops its
+// options open beneath it. Picking one closes it again.
+function DayDropdown({
+  label,
+  value,
+  options,
+  onChange,
+  t,
+}: {
+  label: string;
+  value: number;
+  options: number[];
+  onChange: (days: number) => void;
+  t: Theme;
+}) {
+  const s = styles(t);
+  const [open, setOpen] = useState(false);
+  return (
+    <View style={s.dropdown}>
+      <View style={s.dropdownRow}>
+        <Text style={s.label}>{label}</Text>
+        <Pressable
+          onPress={() => setOpen(!open)}
+          hitSlop={6}
+          style={[s.dropdownButton, open && { borderColor: t.tint }]}
+        >
+          <Text style={s.dropdownValue}>{`${value}d`}</Text>
+          <Text style={s.dropdownCaret}>{open ? "▴" : "▾"}</Text>
+        </Pressable>
+      </View>
+      {open && (
+        <View style={s.chips}>
+          {options.map((d) => (
+            <Chip
+              key={d}
+              label={`${d}d`}
+              active={value === d}
+              onPress={() => {
+                onChange(d);
+                setOpen(false);
+              }}
+              t={t}
+            />
+          ))}
+        </View>
+      )}
+    </View>
+  );
+}
+
 function Segmented<T extends string>({
   value,
   options,
@@ -334,7 +385,7 @@ function Segmented<T extends string>({
 }
 
 // Every themed component here asks for the sheet on each render — Section, Chip,
-// Segmented, and the screen itself — so build it once per theme
+// DayDropdown, Segmented, and the screen itself — so build it once per theme
 // instead of once per call. There are only ever two Theme objects to key on.
 const sheets = new WeakMap<Theme, ReturnType<typeof createStyles>>();
 function styles(t: Theme) {
@@ -371,6 +422,21 @@ const createStyles = (t: Theme) =>
     chips: { flexDirection: "row", flexWrap: "wrap", gap: 8 },
     chip: { paddingVertical: 8, paddingHorizontal: 14, borderRadius: 20, borderWidth: 1.5 },
     methodRow: { gap: 8 },
+    dropdown: { gap: 10 },
+    dropdownRow: { flexDirection: "row", justifyContent: "space-between", alignItems: "center" },
+    dropdownButton: {
+      flexDirection: "row",
+      alignItems: "center",
+      gap: 8,
+      paddingVertical: 6,
+      paddingHorizontal: 12,
+      borderRadius: 10,
+      borderWidth: 1.5,
+      borderColor: t.border,
+      backgroundColor: t.inputBg,
+    },
+    dropdownValue: { fontSize: 15, fontWeight: "700", color: t.text },
+    dropdownCaret: { fontSize: 12, color: t.subtext },
     segmented: {
       flexDirection: "row",
       backgroundColor: t.inputBg,
