@@ -15,7 +15,7 @@ import {
   TUNING,
   type Word,
 } from "../../shared/src";
-import { buildQueue, migrateFacets } from "../src/facets";
+import { buildQueue, gradeReview, migrateFacets } from "../src/facets";
 
 const NOW = new Date("2026-07-11T12:00:00.000Z");
 const DAY_MS = 24 * 60 * 60 * 1000;
@@ -294,6 +294,41 @@ describe("buildQueue", () => {
     // meaning holds the oldest card, so it leads even though m1 has the longest
     // interval; runs of 1 alternate.
     expect(q.map((i) => i.word._id)).toEqual(["m1", "r1", "m2", "r2"]);
+  });
+});
+
+describe("gradeReview", () => {
+  const grade = (w: Word, g: Parameters<typeof gradeReview>[2]) => gradeReview(w, "meaning", g, NOW);
+
+  it("grades the asked facet and stamps it as answered", () => {
+    const out = grade(wordWith({ meaning: { ...started, intervalDays: 4 } }), "reviewed_okay");
+    expect(out.meaning.intervalDays).toBe(10);
+    expect(out.meaning.lastReviewed).toBe(NOW.toISOString());
+  });
+
+  it("keeps each sibling at least a fifth of its interval away, right or wrong", () => {
+    const w = wordWith({
+      meaning: started,
+      reading: { ...started, intervalDays: 10, due: iso(1) }, // too close → 2 days out
+      writing: { ...started, intervalDays: 30, due: iso(-3) }, // overdue → 6 days out
+    });
+    for (const g of ["reviewed_okay", "reviewed_forgot"] as const) {
+      const out = grade(w, g);
+      expect(daysUntilDue(out.reading)).toBeCloseTo(2);
+      expect(daysUntilDue(out.writing)).toBeCloseTo(6);
+      expect(out.reading.intervalDays).toBe(10); // only the due date moves
+      expect(out.reading.lastReviewed).toBe(w.facets.reading.lastReviewed);
+    }
+  });
+
+  it("a sibling already due further out keeps its date", () => {
+    const w = wordWith({ meaning: started, writing: { ...started, intervalDays: 30, due: iso(20) } });
+    expect(grade(w, "reviewed_okay").writing.due).toBe(w.facets.writing.due);
+  });
+
+  it("a sibling with no interval yet stays put", () => {
+    const w = wordWith({ meaning: started, reading: { due: iso(-5) } });
+    expect(grade(w, "reviewed_okay").reading.due).toBe(w.facets.reading.due);
   });
 });
 

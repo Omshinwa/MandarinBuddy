@@ -8,7 +8,7 @@ import {
   GRADES,
   REVIEW_BATCH,
 } from "../../../shared/src";
-import { buildQueue } from "../facets";
+import { buildQueue, gradeReview } from "../facets";
 import { serializeWord, words } from "../db";
 
 export const reviewRoute = new Hono();
@@ -46,9 +46,9 @@ reviewRoute.get("/queue", async (c) => {
 });
 
 // POST /api/review/grade  — body {wordId, facet, grade}
-// The grade moves only the asked facet's schedule. A review answer also stamps
-// `lastReviewed`, which unlocks the facet for good and buries its siblings for
-// the rest of the day; chat grades (conversation_missed) don't.
+// A review answer goes through gradeReview: the asked facet takes the grade
+// and its siblings are spaced away. Chat grades (conversation_missed) move only
+// the asked facet.
 reviewRoute.post("/grade", async (c) => {
   const body = (await c.req.json()) as { wordId?: string; facet?: Facet; grade?: Grade };
   if (!body.wordId || !ObjectId.isValid(body.wordId)) return c.json({ error: "bad wordId" }, 400);
@@ -60,11 +60,12 @@ reviewRoute.post("/grade", async (c) => {
   if (!word?.facets) return c.json({ error: "not found" }, 404);
 
   const now = new Date();
-  const next = applyGrade(word.facets[body.facet], body.grade, now);
-  if (body.grade.startsWith("reviewed_")) next.lastReviewed = now.toISOString();
+  const facets = body.grade.startsWith("reviewed_")
+    ? gradeReview(word, body.facet, body.grade, now)
+    : { ...word.facets, [body.facet]: applyGrade(word.facets[body.facet], body.grade, now) };
   const result = await words.findOneAndUpdate(
     { _id: word._id },
-    { $set: { [`facets.${body.facet}`]: next, updatedAt: now } },
+    { $set: { facets, updatedAt: now } },
     { returnDocument: "after" },
   );
   return c.json(serializeWord(result!));

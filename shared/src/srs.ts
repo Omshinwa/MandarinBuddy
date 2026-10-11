@@ -16,6 +16,7 @@ export const TUNING = {
   missedDivisor: 2, // conversation_missed halves the interval
   leechThreshold: 8, // Anki default: after this many lapses a card is a "leech" and gets suspended
   unlockAfterDays: 7, // reading/writing unlock once meaning's interval reaches this
+  siblingNudge: 0.2, // answering one facet keeps the others at least this share of their interval away
   dayRolloverHour: 4, // a review day starts at 4am local (like Anki), so late nights count as the day before
 };
 
@@ -102,6 +103,17 @@ export function applyGrade(srs: Srs, grade: Grade, now: Date): Srs {
       return { ...srs, intervalDays: interval, due: now.toISOString() };
     }
   }
+}
+
+// Like Skritter: answering one facet keeps each sibling at least
+// `siblingNudge` of its interval away, so the word doesn't come back from
+// another side too soon. A sibling already due later than that keeps its date.
+// One with no interval (new, or just forgotten) has nothing to scale; the day's
+// bury keeps it away for now.
+export function nudgeSibling(srs: Srs, now: Date): Srs {
+  if (srs.intervalDays === 0) return srs;
+  const floor = addDays(now, srs.intervalDays * TUNING.siblingNudge);
+  return floor > srs.due ? { ...srs, due: floor } : srs;
 }
 
 // ISO strings compare lexicographically in chronological order.

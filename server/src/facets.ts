@@ -1,10 +1,13 @@
 import {
   addDays,
+  applyGrade,
   type Facet,
   FACETS,
+  type Grade,
   isDue,
   isFacetUnlocked,
   newSrs,
+  nudgeSibling,
   type ReviewItem,
   type Srs,
   type Word,
@@ -24,6 +27,17 @@ export function facetAnswerable(w: Pick<WordInput, "chinese" | "pinyin" | "engli
     case "writing":
       return has(w.chinese) && has(w.english);
   }
+}
+
+// A review answer on one facet, right or wrong. The asked facet takes the grade
+// and is stamped `lastReviewed`, which unlocks it for good and buries its
+// siblings for the rest of the day; the siblings are also spaced away (see
+// nudgeSibling).
+export function gradeReview(w: Pick<Word, "facets">, facet: Facet, grade: Grade, now: Date): Record<Facet, Srs> {
+  const out = { ...w.facets };
+  for (const d of FACETS) if (d !== facet) out[d] = nudgeSibling(w.facets[d], now);
+  out[facet] = { ...applyGrade(w.facets[facet], grade, now), lastReviewed: now.toISOString() };
+  return out;
 }
 
 export interface QueueOptions {
