@@ -314,8 +314,20 @@ export function ChatThread({ placeholder, emptyHint, gloss, onWordAdded, enableR
 
   const clear = async () => {
     if (!(await confirm("Clear conversation?"))) return;
-    await api.clearChat().catch(() => {});
-    setItems([]);
+    try {
+      await api.clearChat();
+      setItems([]);
+    } catch (err) {
+      setItems((prev) => [
+        ...prev,
+        {
+          id: newId(),
+          kind: "msg",
+          role: "computer",
+          content: `⚠️ ${err instanceof Error ? err.message : "connection failed"}`,
+        },
+      ]);
+    }
   };
 
   const renderItem = ({ item }: { item: Item }) => {

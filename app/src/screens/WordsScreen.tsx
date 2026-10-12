@@ -30,7 +30,7 @@ import { FACET_LABEL, facetEmoji } from "../lib/labels";
 import { useTestMethods } from "../lib/settings";
 import { OutlineButton, PrimaryButton } from "../components/Button";
 import { TextStyling } from "../components/TextStyling";
-import { ApiError, api } from "../lib/api";
+import { ApiError, api, WRONG_PASSWORD } from "../lib/api";
 import { confirm } from "../lib/confirm";
 import { useTheme, type Theme } from "../theme";
 
@@ -321,6 +321,12 @@ function FacetTable({ word, enabled, t }: { word: Word; enabled: readonly Facet[
   );
 }
 
+function saveErrorText(err: unknown): string {
+  return err instanceof ApiError && err.status === 401
+    ? WRONG_PASSWORD
+    : "Could not save — is the server running?";
+}
+
 function WordSheet({ word, onClose, t }: { word: Word | null; onClose: (changed: boolean) => void; t: Theme }) {
   const [methods] = useTestMethods();
   const enabled = FACETS.filter((d) => methods[d] !== "none");
@@ -364,29 +370,36 @@ function WordSheet({ word, onClose, t }: { word: Word | null; onClose: (changed:
       setError(
         err instanceof ApiError && err.status === 409
           ? "This word is already in your dictionary."
-          : "Could not save — is the server running?",
+          : saveErrorText(err),
       );
+    }
+  };
+
+  // Reset / reactivate / delete: close on success, otherwise say why it failed.
+  const write = async (req: () => Promise<unknown>) => {
+    try {
+      await req();
+      onClose(true);
+    } catch (err) {
+      setError(saveErrorText(err));
     }
   };
 
   const resetProgress = async () => {
     if (!word) return;
     if (!(await confirm("Reset progress?", "The card goes back to due-now, all mastery cleared."))) return;
-    await api.updateWord(word._id, { resetProgress: true });
-    onClose(true);
+    await write(() => api.updateWord(word._id, { resetProgress: true }));
   };
 
   const reactivate = async () => {
     if (!word) return;
-    await api.updateWord(word._id, { unsuspend: true });
-    onClose(true);
+    await write(() => api.updateWord(word._id, { unsuspend: true }));
   };
 
   const remove = async () => {
     if (!word) return;
     if (!(await confirm("Delete word?", `${word.chinese} will be removed permanently.`))) return;
-    await api.deleteWord(word._id);
-    onClose(true);
+    await write(() => api.deleteWord(word._id));
   };
 
   const inputStyle = [styles.input, { backgroundColor: t.inputBg, color: t.text }];

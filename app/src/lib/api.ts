@@ -40,6 +40,10 @@ export class ApiError extends Error {
   }
 }
 
+// Writes without the right password come back 401. The password is only ever
+// set in Settings, so that's where the error points.
+export const WRONG_PASSWORD = "Wrong password, set it in Settings (⚙️ on the Review tab).";
+
 async function request<T>(path: string, init?: RequestInit): Promise<T> {
   const res = await fetch(`${API_BASE}${path}`, {
     ...init,
@@ -53,7 +57,8 @@ async function request<T>(path: string, init?: RequestInit): Promise<T> {
   });
   if (!res.ok) {
     const body = (await res.json().catch(() => ({}))) as { error?: string };
-    throw new ApiError(res.status, body.error ?? `HTTP ${res.status}`, body);
+    const message = res.status === 401 ? WRONG_PASSWORD : (body.error ?? `HTTP ${res.status}`);
+    throw new ApiError(res.status, message, body);
   }
   return (await res.json()) as T;
 }
@@ -113,6 +118,7 @@ export async function streamChat(
     body: JSON.stringify(body),
   });
   if (!res.ok || !res.body) {
+    if (res.status === 401) throw new Error(WRONG_PASSWORD);
     let msg = `HTTP ${res.status}`;
     try {
       msg = ((await res.json()) as { error?: string }).error ?? msg;

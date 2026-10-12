@@ -24,9 +24,10 @@ import { FlashcardCard } from "../components/review/FlashcardCard";
 import { InputCard } from "../components/review/InputCard";
 import { ReviewChrome } from "../components/review/ReviewChrome";
 import { facetView } from "../components/review/CardParts";
-import { api } from "../lib/api";
+import { api, ApiError } from "../lib/api";
 import { facetBadge } from "../lib/labels";
 import {
+  getAppPassword,
   leniencyMinLen,
   resolveMethod,
   useBothTransitionDays,
@@ -34,6 +35,7 @@ import {
   useInputLeniency,
   useReviewBatch,
   useScaffoldMaxDays,
+  useAppPassword,
   useTestMethods,
 } from "../lib/settings";
 import { useWindowKey } from "../lib/web";
@@ -81,6 +83,9 @@ export function ReviewScreen() {
   const runCount = useRef(0); // cards shown in the current run, reset by every celebration
   const [baseHue, setBaseHue] = useState(() => Math.floor(Math.random() * 360));
   const [saveError, setSaveError] = useState<string | null>(null);
+  // Without the password the session still runs in full (grades apply to the
+  // local queue), it just never reaches the server — a demo for visitors.
+  const unlocked = !!useAppPassword()[0];
 
   // Reloads on any settings change that affects the queue: the batch size, and
   // the test methods (a facet switched to/from "None" changes what's served, and
@@ -158,9 +163,11 @@ export function ReviewScreen() {
       },
       (err) =>
         setSaveError(
-          `Couldn't save your last answer — ${
-            err instanceof Error ? err.message : "request failed"
-          }. Is the server (port 6767) running?`,
+          err instanceof ApiError && err.status === 401
+            ? err.message
+            : `Couldn't save your last answer — ${
+                err instanceof Error ? err.message : "request failed"
+              }. Is the server (port 6767) running?`,
         ),
     );
   }, []);
@@ -172,7 +179,7 @@ export function ReviewScreen() {
         ...item,
         word: { ...item.word, facets: { ...item.word.facets, [item.facet]: graded } },
       };
-      save(api.grade(item.word._id, item.facet, g));
+      if (getAppPassword()) save(api.grade(item.word._id, item.facet, g));
       const feedback =
         g === "reviewed_forgot"
           ? Haptics.NotificationFeedbackType.Error
@@ -199,7 +206,7 @@ export function ReviewScreen() {
   const requeueUngraded = useCallback(
     (item: ReviewItem) => {
       Haptics.selectionAsync().catch(() => {});
-      save(api.requeue(item.word._id, item.facet));
+      if (getAppPassword()) save(api.requeue(item.word._id, item.facet));
       advance(item, true, reviewed);
     },
     [advance, reviewed, save],
@@ -326,6 +333,11 @@ export function ReviewScreen() {
         {saveError && (
           <Text style={[styles.saveError, { backgroundColor: t.danger }]}>{saveError}</Text>
         )}
+        {!unlocked && (
+          <Text style={[styles.demoNote, { color: t.subtext }]}>
+            Demo mode: answers aren't saved. Enter the password in Settings ⚙️ to save them.
+          </Text>
+        )}
         {/* Both card types take the same props; only the flashcard ignores the
             requeue/continue hooks it has no use for. */}
         <Card
@@ -349,6 +361,7 @@ const styles = StyleSheet.create({
   center: { flex: 1, alignItems: "center", justifyContent: "center", gap: 10 },
   cardArea: { padding: 16, gap: 12, flexGrow: 1 },
   saveError: { color: "#fff", fontSize: 13, borderRadius: 10, padding: 10, overflow: "hidden" },
+  demoNote: { fontSize: 13, textAlign: "center" },
   metaRow: { flexDirection: "row", justifyContent: "space-between", alignItems: "center" },
   retryButton: { marginTop: 12 },
 });

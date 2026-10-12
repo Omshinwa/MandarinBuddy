@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { Pressable, ScrollView, StyleSheet, Text, View } from "react-native";
+import { Pressable, ScrollView, StyleSheet, Text, TextInput, View } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { FACETS } from "../../../shared/src";
 import { OutlineButton } from "../components/Button";
@@ -19,6 +19,7 @@ import {
   REVIEW_BATCH_OPTIONS,
   THEME_OPTIONS,
   type ThemePref,
+  useAppPassword,
   useBothTransitionDays,
   useFuzzyPinyin,
   useInputLeniency,
@@ -47,6 +48,7 @@ export function SettingsScreen({ onClose }: { onClose?: () => void }) {
   const s = styles(t);
   const insets = useSafeAreaInsets();
   const [themePref, setThemePref] = useThemePref();
+  const [password, setPassword] = useAppPassword();
   const [language, setLanguage] = useUserLanguage();
   const [methods, setMethod] = useTestMethods();
   const [fuzzy, setFuzzy] = useFuzzyPinyin();
@@ -92,6 +94,22 @@ export function SettingsScreen({ onClose }: { onClose?: () => void }) {
           </Pressable>
         )}
       </View>
+
+      <Section
+        title="Password"
+        hint="Needed to chat, edit words and save reviews. Without it you can still browse and try a review."
+        t={t}
+      >
+        <TextInput
+          value={password}
+          onChangeText={setPassword}
+          placeholder="Password"
+          placeholderTextColor={t.subtext}
+          secureTextEntry
+          autoCapitalize="none"
+          style={s.input}
+        />
+      </Section>
 
       <Section title="Appearance" t={t}>
         <View style={s.chips}>
@@ -419,6 +437,16 @@ const createStyles = (t: Theme) =>
       gap: 14,
     },
     label: { fontSize: 16, color: t.text },
+    input: {
+      borderWidth: 1,
+      borderColor: t.border,
+      borderRadius: 10,
+      paddingHorizontal: 14,
+      paddingVertical: 12,
+      fontSize: 16,
+      color: t.text,
+      backgroundColor: t.inputBg,
+    },
     chips: { flexDirection: "row", flexWrap: "wrap", gap: 8 },
     chip: { paddingVertical: 8, paddingHorizontal: 14, borderRadius: 20, borderWidth: 1.5 },
     methodRow: { gap: 8 },

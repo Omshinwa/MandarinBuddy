@@ -85,9 +85,10 @@ const stringStore = (key: string, def: string) =>
 // The shared site password (mirrors the server's APP_PASSWORD). It's sent as the
 // x-app-password header on every mutating request; the server compares it to its
 // env var and rejects writes that don't match. Stored locally so you only type it
-// once. Empty string = not entered yet, which makes the AuthGate show the login
-// screen. The real secret never lives in this bundle — the app only forwards what
-// the user typed and lets the server decide.
+// once, in Settings. Empty string = not entered yet: the app stays readable,
+// writes fail with a wrong-password error, and review grades aren't sent. The real
+// secret never lives in this bundle — the app only forwards what the user typed
+// and lets the server decide.
 const appPasswordStore = stringStore("auth.appPassword", "");
 // api.ts's request()/streamChat() read this synchronously (they're not React), so
 // kick a one-time hydration now rather than waiting for a component to subscribe.
