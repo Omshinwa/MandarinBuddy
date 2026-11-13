@@ -18,7 +18,10 @@ import { gradeColor, gradeForTries, gradeLabel, previewLabel } from "./grades";
 // the card — it bumps the try count and lets the user keep going until they
 // either type a match or give up (the red Forgot button). `outcome` is null
 // while still answering.
-function useTypedAnswer(check: (guess: string) => MatchVerdict) {
+function useTypedAnswer(
+  check: (guess: string) => MatchVerdict,
+  transform?: (typed: string) => string,
+) {
   const [answer, setAnswer] = useState("");
   const [wrongTries, setWrongTries] = useState(0);
   // Verdict of the last submit, cleared as soon as the user edits again. null =
@@ -46,7 +49,7 @@ function useTypedAnswer(check: (guess: string) => MatchVerdict) {
     }
   };
   const edit = (text: string) => {
-    setAnswer(text);
+    setAnswer(transform ? transform(text) : text);
     setLastMiss(null);
   };
   return { answer, edit, submit, giveUp, wrongTries, lastMiss, outcome };
@@ -214,7 +217,7 @@ export function InputCard({
   registerContinue,
   t,
 }: CardProps) {
-  const { answer, edit, submit, giveUp, wrongTries, lastMiss, outcome } = useTypedAnswer(view.check);
+  const { answer, edit, submit, giveUp, wrongTries, lastMiss, outcome } = useTypedAnswer(view.check, view.transformInput);
   const [showHint, setShowHint] = useState(false);
 
   // Scaffolded: the word is read aloud up front (for reading that turns it into

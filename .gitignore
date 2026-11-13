@@ -8,3 +8,4 @@ notes/
 .prettierignore
 .prettierrc
 notes.md
+.codegraphy/*

@@ -5,6 +5,7 @@ import {
   type Grade,
   lenientVerdict,
   type MatchVerdict,
+  numberedToToneMarks,
   type Srs,
   type Word,
 } from "../../../../shared/src";
@@ -23,6 +24,7 @@ export interface FacetView {
   promptNote?: string; // e.g. writing's "✍️ write the strokes", hidden once answered
   hint?: string; // optional "show hint" text before answering (writing's comments)
   check: (guess: string) => MatchVerdict; // input grading
+  transformInput?: (typed: string) => string; // rewrites the field as you type
   placeholder: string;
   inputSize?: number;
 }
@@ -53,6 +55,7 @@ export function facetView(
         // Mature reading has no scaffold, so audio (the giveaway) stays off.
         promptSub: scaffold ? word.english : undefined,
         check: (g) => lenientVerdict(word.pinyin, g, fuzzy, minLen),
+        transformInput: numberedToToneMarks, // a1 → ā, i4 → ì
         placeholder: fuzzy ? "pinyin (lenient)" : "pinyin",
       };
     case "writing":
